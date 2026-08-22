@@ -1,0 +1,50 @@
+name: nivelir_app
+description: Поверка и юстировка компенсаторного нивелира — определение угла i в поле.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # состояние
+  provider: ^6.1.2
+
+  # хранилище
+  sqflite: ^2.3.3
+  path: ^1.9.0
+  shared_preferences: ^2.3.2
+
+  # экспорт
+  pdf: ^3.11.1
+  printing: ^5.13.2
+  excel: ^4.0.6
+  share_plus: ^10.0.2
+  path_provider: ^2.1.4
+
+  # напоминания
+  flutter_local_notifications: ^17.2.3
+  timezone: ^0.9.4
+
+  # оформление и форматирование
+  google_fonts: ^6.2.1
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/devices_catalog.json
+  fonts:
+    - family: RobotoPdf
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700

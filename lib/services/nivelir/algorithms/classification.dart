@@ -1,0 +1,175 @@
+/// Классификация нивелира по СКО и допуск угла i.
+///
+/// ГОСТ 10528-90, табл. 1 — допустимая СКО измерения превышения на 1 км
+/// двойного хода. У стандарта ДВЕ колонки, и они разные:
+///
+///   нивелиры с компенсатором: 0,3 / 2,0 / 5,0 мм
+///   нивелиры с уровнем:       0,5 / 3,0 / 5,0 мм
+///                             (высокоточные / точные / технические)
+///
+/// Приложение работает только с компенсаторными приборами — берётся первая
+/// колонка. По уровенной прибор с СКО 2,5 мм/км попал бы в "точные", по
+/// компенсаторной он технический.
+///
+/// ДОПУСК УГЛА i — 10", и это подтверждено тремя независимыми источниками:
+///   ГОСТ 10528-90, п. 2.3 — не более 10" при (20 ± 2) °С;
+///   ГКИНП (ГНТА) 17-195-99, п. 4.2.5 — окончательное значение угла i не
+///     должно превышать 10" для всех типов нивелиров;
+///   ГКИНП 03-010-03, приложение 9 — если среднее значение угла i больше
+///     10", прибор юстируют.
+/// Деления по классам приборов нет ни в одном из них.
+///
+/// ВНИМАНИЕ ПРО ИСТОЧНИКИ. ГКИНП 17-196-85 УТРАТИЛА СИЛУ: по преамбуле
+/// ГКИНП (ГНТА) 17-195-99 с введением её в действие (01.10.1999) утрачивают
+/// силу инструкции ГКИНП 17-195-85 ÷ 17-199-85, то есть весь сборник 1985
+/// года. Ссылаться в приложении на 17-196-85 нельзя.
+///
+/// Расхождение приёмов 3"/5" в редакцию 1999 года НЕ перешло, но осталось
+/// в действующей ГКИНП 03-010-03, приложение 9: при исследовании делают
+/// 2 приёма, расхождение значений угла i между ними не должно превышать
+/// 3" у высокоточных и 5" у всех остальных типов. Это критерий
+/// повторяемости, а не порог исправности — в приложении он показывается
+/// справочно и на вердикт не влияет.
+class DeviceClassification {
+  DeviceClassification._();
+
+  static const String highPrecision = 'высокоточные';
+  static const String precise = 'точные';
+  static const String technical = 'технические';
+
+  /// Допуск угла i — единый для всех групп приборов.
+  static const double toleranceArcsec = 10.0;
+
+  static const String toleranceSource =
+      'ГОСТ 10528-90 п. 2.3; ГКИНП (ГНТА) 17-195-99 п. 4.2.5';
+
+  /// Минимальное число приёмов по умолчанию — см. [RunsNorm].
+  static const int minRunsByNorm = RunsNorm.defaultMinRuns;
+
+  static const String runsSource = RunsNorm.defaultSource;
+
+  static String gostClass(double skoMmKm) {
+    if (skoMmKm <= 0.3) return highPrecision;
+    if (skoMmKm <= 2.0) return precise;
+    return technical;
+  }
+
+  /// Предельное расхождение приёмов, ГКИНП 03-010-03, приложение 9.
+  static double runSpreadLimitArcsec(double skoMmKm) {
+    return gostClass(skoMmKm) == highPrecision ? 3.0 : 5.0;
+  }
+
+  static const String runSpreadSource = 'ГКИНП 03-010-03, приложение 9';
+
+  /// Изменение угла i на 1 °С. ГОСТ 10528-90, п. 2.4 — по группам приборов;
+  /// ГКИНП 03-010-03, табл. 4 нормирует то же по классам работ (0,5" для
+  /// I и II, 0,8" для III и IV).
+  static double tempDriftArcsecPerC(double skoMmKm) {
+    switch (gostClass(skoMmKm)) {
+      case highPrecision:
+        return 0.5;
+      case precise:
+        return 0.8;
+      default:
+        return 1.5;
+    }
+  }
+
+  /// Обозначение по ГОСТ 10528-90, приложение 4 и ГКИНП 03-010-03, п. 21.1:
+  /// буква «Н» плюс цифровой код, соответствующий СКП превышения на 1 км
+  /// двойного хода.
+  static String designationHint(double skoMmKm) {
+    if (skoMmKm <= 0.5) return 'Н-05';
+    if (skoMmKm <= 1.0) return 'Н-1';
+    if (skoMmKm <= 2.0) return 'Н-2';
+    if (skoMmKm <= 3.0) return 'Н-3';
+    return 'Н-10';
+  }
+}
+
+
+/// Основание для числа приёмов.
+///
+/// Действуют два документа, и они расходятся:
+///
+/// * ГКИНП (ГНТА) 17-195-99, п. 4.2.5 — количество приёмов измерений в любом
+///   способе должно быть не менее трёх;
+/// * ГКИНП (ГНТА) 03-010-03, приложение 9 — при исследовании нивелиров
+///   делают 2 приёма, не снимая нивелир со штатива.
+///
+/// 03-010-03 моложе (2004 против 1999), но 17-195-99 не отменён и относится
+/// к технологической поверке, тогда как приложение 9 описывает лабораторное
+/// исследование. Приложение не выбирает за исполнителя: основание задаётся
+/// в мастере и записывается в протокол, чтобы по протоколу было видно, по
+/// какому документу набиралось число приёмов.
+class RunsNorm {
+  final String id;
+  final int minRuns;
+  final String source;
+  final String description;
+
+  const RunsNorm({
+    required this.id,
+    required this.minRuns,
+    required this.source,
+    required this.description,
+  });
+
+  static const String technologicalId = 'gkinp_17_195_99';
+  static const String laboratoryId = 'gkinp_03_010_03';
+
+  static const RunsNorm technological = RunsNorm(
+    id: technologicalId,
+    minRuns: 3,
+    source: 'ГКИНП (ГНТА) 17-195-99, п. 4.2.5',
+    description: 'Технологическая поверка: количество приёмов в любом '
+        'способе — не менее трёх, за результат берётся среднее.',
+  );
+
+  static const RunsNorm laboratory = RunsNorm(
+    id: laboratoryId,
+    minRuns: 2,
+    source: 'ГКИНП (ГНТА) 03-010-03, приложение 9',
+    description: 'Лабораторное исследование: делают 2 приёма, не снимая '
+        'нивелир со штатива; расхождение между ними контролируется.',
+  );
+
+  static const List<RunsNorm> all = [technological, laboratory];
+
+  /// По умолчанию — более строгое основание.
+  static const RunsNorm fallback = technological;
+  static const int defaultMinRuns = 3;
+  static const String defaultSource = 'ГКИНП (ГНТА) 17-195-99, п. 4.2.5';
+
+  /// Идентификатор для случая, когда приёмов меньше, чем требует любой из
+  /// документов (один приём).
+  static const String noneId = 'none';
+
+  static RunsNorm? byIdOrNull(String? id) {
+    for (final n in all) {
+      if (n.id == id) return n;
+    }
+    return null;
+  }
+
+  static RunsNorm byId(String? id) => byIdOrNull(id) ?? fallback;
+
+  /// Самое строгое основание, которому удовлетворяет данное число приёмов.
+  ///
+  /// Основание не выбирается исполнителем: 3 приёма проходят по обоим
+  /// документам, 2 — только по приложению 9, 1 — ни по одному. Спрашивать
+  /// об этом отдельно значит спрашивать то, что уже следует из числа.
+  static RunsNorm? strictestSatisfiedBy(int runCount) {
+    for (final n in all) {
+      if (n.isSatisfiedBy(runCount)) return n;
+    }
+    return null;
+  }
+
+  /// Идентификатор для записи в протокол.
+  static String idForRunCount(int runCount) =>
+      strictestSatisfiedBy(runCount)?.id ?? noneId;
+
+  /// Набрано ли достаточно приёмов по этому основанию.
+  bool isSatisfiedBy(int runCount) => runCount >= minRuns;
+}
