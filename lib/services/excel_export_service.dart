@@ -17,6 +17,7 @@ class ExcelExportService {
     'Прибор',
     'Метод',
     'Класс нивел.',
+    'Поверку выполнил',
     'Основание приёмов',
     'Приём',
     'Ст.1 рейка A',
@@ -73,6 +74,7 @@ class ExcelExportService {
           TextCellValue(v.levelingClass == null
               ? '—'
               : LevelingClass.roman(v.levelingClass!)),
+          TextCellValue(v.performedBy ?? '—'),
           TextCellValue(v.runsNorm?.source ?? 'ниже нормы'),
           run == null ? TextCellValue('—') : IntCellValue(run.runIndex),
           run == null

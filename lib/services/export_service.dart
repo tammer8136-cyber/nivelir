@@ -53,6 +53,8 @@ class ExportService {
           ),
           pw.SizedBox(height: 12),
           pw.Text('Дата поверки: ${Units.dateTime.format(v.createdAt)}'),
+          if (v.performedBy != null && v.performedBy!.isNotEmpty)
+            pw.Text('Поверку выполнил: ${v.performedBy}'),
           pw.SizedBox(height: 16),
 
           _section('ПРИБОР', [

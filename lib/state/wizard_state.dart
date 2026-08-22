@@ -89,6 +89,10 @@ class WizardState extends ChangeNotifier {
 
   final notesCtrl = TextEditingController();
 
+  /// Кто выполняет поверку. Подставляется из последнего протокола —
+  /// обычно это один и тот же человек, вводить каждый раз незачем.
+  final performerCtrl = TextEditingController();
+
   final paramsFormKey = GlobalKey<FormState>();
   final station1FormKey = GlobalKey<FormState>();
   final station2FormKey = GlobalKey<FormState>();
@@ -338,6 +342,9 @@ class WizardState extends ChangeNotifier {
       adjusted: _adjusted,
       levelingClass: _levelingClass,
       runsNormId: RunsNorm.idForRunCount(_runCount),
+      performedBy: performerCtrl.text.trim().isEmpty
+          ? null
+          : performerCtrl.text.trim(),
       notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
     );
 
@@ -352,6 +359,10 @@ class WizardState extends ChangeNotifier {
 
     await SettingsService.saveLastDeviceId(_device!.id!);
     await SettingsService.saveLastPreset(_preset.id);
+    final performer = performerCtrl.text.trim();
+    if (performer.isNotEmpty) {
+      await SettingsService.saveLastPerformer(performer);
+    }
 
     notifyListeners();
     return verification;
@@ -396,6 +407,7 @@ class WizardState extends ChangeNotifier {
       run.dispose();
     }
     notesCtrl.dispose();
+    performerCtrl.dispose();
     s1ACtrl.dispose();
     s1BCtrl.dispose();
     s2ACtrl.dispose();

@@ -78,6 +78,11 @@ class Verification {
   /// Основание, по которому набиралось число приёмов (см. RunsNorm).
   final String runsNormId;
 
+  /// Кто выполнял поверку. Свойство ПОВЕРКИ, а не прибора: один и тот же
+  /// прибор в разные дни поверяют разные исполнители, и в протоколе должен
+  /// стоять тот, кто её делал.
+  final String? performedBy;
+
   /// Класс нивелирования, для которого выполнялась поверка (1..4).
   /// null — поверка «вообще», без привязки к классу работ.
   final int? levelingClass;
@@ -103,6 +108,7 @@ class Verification {
     this.adjusted = false,
     this.farTheoreticalMm,
     this.levelingClass,
+    this.performedBy,
     this.runsNormId = RunsNorm.technologicalId,
     this.notes,
   });
@@ -127,6 +133,7 @@ class Verification {
     required List<VerificationRun> runs,
     bool adjusted = false,
     int? levelingClass,
+    String? performedBy,
     String runsNormId = RunsNorm.technologicalId,
     String? notes,
   }) {
@@ -148,6 +155,7 @@ class Verification {
       adjusted: adjusted,
       farTheoreticalMm: adjusted ? result.farTheoreticalMm : null,
       levelingClass: levelingClass,
+      performedBy: performedBy,
       runsNormId: runsNormId,
       notes: notes,
     );
@@ -179,6 +187,7 @@ class Verification {
       adjusted: adjusted ?? this.adjusted,
       farTheoreticalMm: farTheoreticalMm ?? this.farTheoreticalMm,
       levelingClass: levelingClass,
+      performedBy: performedBy,
       runsNormId: runsNormId,
       notes: notes ?? this.notes,
     );
@@ -206,6 +215,7 @@ class Verification {
         'adjusted': adjusted ? 1 : 0,
         'far_theoretical_mm': farTheoreticalMm,
         'leveling_class': levelingClass,
+        'performed_by': performedBy,
         'runs_norm': runsNormId,
         'notes': notes,
       };
@@ -239,6 +249,7 @@ class Verification {
         adjusted: (m['adjusted'] as int? ?? 0) == 1,
         farTheoreticalMm: (m['far_theoretical_mm'] as num?)?.toDouble(),
         levelingClass: (m['leveling_class'] as num?)?.toInt(),
+        performedBy: m['performed_by'] as String?,
         runsNormId:
             (m['runs_norm'] as String?) ?? RunsNorm.technologicalId,
         notes: m['notes'] as String?,

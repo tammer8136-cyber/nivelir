@@ -163,6 +163,8 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
                     '${v.runCount}${v.meetsRunsNorm ? '' : ' — ниже нормы'}',
                   ),
                   _row('Основание', v.runsNorm?.source ?? '—'),
+                  if (v.performedBy != null && v.performedBy!.isNotEmpty)
+                    _row('Поверку выполнил', v.performedBy!),
                   _row(
                     'Класс нивелирования',
                     v.levelingClass == null

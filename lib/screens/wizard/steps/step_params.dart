@@ -44,6 +44,15 @@ class _StepParamsState extends State<StepParams> {
       final device = await db.getInstance(deviceId);
       if (device != null && mounted) wizard.setDevice(device);
     }
+
+    // Исполнитель обычно один и тот же. Не перетираем, если поле уже
+    // заполнено: мастер мог быть открыт повторно.
+    if (wizard.performerCtrl.text.isEmpty) {
+      final performer = await SettingsService.loadLastPerformer();
+      if (performer != null && mounted) {
+        wizard.performerCtrl.text = performer;
+      }
+    }
   }
 
   Future<void> _pickDevice() async {
@@ -100,7 +109,9 @@ class _StepParamsState extends State<StepParams> {
             ),
           const SizedBox(height: 24),
 
-          const _SectionTitle('Метод'),
+          // Описание способа живёт в ⓘ, а не под списком: на экране остаётся
+          // сам выбор, а не полполосы текста.
+          _SectionTitle('Метод', info: preset.description),
           DropdownButtonFormField<String>(
             // Ключ по id: пресет может смениться извне (восстановление
             // прошлого выбора), а FormField читает initialValue только при
@@ -120,11 +131,6 @@ class _StepParamsState extends State<StepParams> {
                 context.read<WizardState>().setPreset(MethodPreset.byId(id));
               }
             },
-          ),
-          const SizedBox(height: 8),
-          Text(
-            preset.description,
-            style: const TextStyle(color: AppTheme.textSecondary, height: 1.4),
           ),
           const SizedBox(height: 24),
 

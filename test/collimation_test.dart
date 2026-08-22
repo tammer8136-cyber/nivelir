@@ -3,6 +3,7 @@ import 'package:nivelir_app/models/device_instance.dart';
 import 'package:nivelir_app/models/device_model.dart';
 import 'package:nivelir_app/models/method_preset.dart';
 import 'package:nivelir_app/models/reminder.dart';
+import 'package:nivelir_app/models/verification.dart';
 import 'package:nivelir_app/services/nivelir/algorithms/classification.dart';
 import 'package:nivelir_app/services/nivelir/algorithms/collimation.dart';
 import 'package:nivelir_app/services/nivelir/algorithms/leveling_class.dart';
@@ -175,6 +176,36 @@ void main() {
       final r = build(1);
       expect(r.runCountMeetsNorm, isFalse);
       expect(r.runsNorm, isNull);
+    });
+  });
+
+  group('Исполнитель поверки', () {
+    test('попадает в протокол и переживает сериализацию', () {
+      final preset = MethodPreset.byId(MethodPreset.workingId);
+      final result = Collimation.summarize(
+        geometry: preset.defaultGeometry,
+        runs: [
+          Collimation.computeRun(
+            geometry: preset.defaultGeometry,
+            station1AMm: 1500,
+            station1BMm: 1200,
+            station2AMm: 1701,
+            station2BMm: 1400,
+          ),
+        ],
+        toleranceArcsec: 10,
+        runSpreadLimitArcsec: 5,
+      );
+      final v = Verification.fromResult(
+        deviceId: 1,
+        deviceLabel: 'Тест X (№ 1)',
+        methodPreset: preset.id,
+        result: result,
+        runs: const [],
+        performedBy: 'Иванов И. И.',
+      );
+      expect(v.performedBy, 'Иванов И. И.');
+      expect(v.toMap()['performed_by'], 'Иванов И. И.');
     });
   });
 

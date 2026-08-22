@@ -6,6 +6,7 @@ class SettingsService {
   static const String _keyUnits = 'settings_units'; // 'mm' | 'm'
   static const String _keySkipPreflight = 'settings_skip_preflight';
   static const String _keyLastDeviceId = 'settings_last_device_id';
+  static const String _keyLastPerformer = 'settings_last_performer';
   static const String _keyLastPreset = 'settings_last_preset';
   static const String _keyTimezone = 'settings_timezone';
 
@@ -32,6 +33,17 @@ class SettingsService {
   static Future<int?> loadLastDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_keyLastDeviceId);
+  }
+
+  /// Исполнитель поверки обычно один и тот же — подставляем прошлого.
+  static Future<String?> loadLastPerformer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLastPerformer);
+  }
+
+  static Future<void> saveLastPerformer(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyLastPerformer, name);
   }
 
   static Future<void> saveLastDeviceId(int id) async {
@@ -66,6 +78,7 @@ class SettingsService {
     await prefs.remove(_keyUnits);
     await prefs.remove(_keySkipPreflight);
     await prefs.remove(_keyLastDeviceId);
+    await prefs.remove(_keyLastPerformer);
     await prefs.remove(_keyLastPreset);
   }
 }

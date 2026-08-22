@@ -28,7 +28,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -59,6 +59,11 @@ class DatabaseService {
           await db.execute('DROP TABLE IF EXISTS devices');
           await _createDeviceTables(db);
           await _createRemindersTable(db);
+        }
+        if (oldVersion < 6) {
+          await db.execute(
+            'ALTER TABLE verifications ADD COLUMN performed_by TEXT',
+          );
         }
       },
       onCreate: (db, version) async {
@@ -97,6 +102,9 @@ class DatabaseService {
             -- Класс нивелирования по ГКИНП 03-010-03, табл. 4 (1..4).
             -- NULL — поверка без привязки к классу работ.
             leveling_class INTEGER,
+
+            -- Кто выполнял поверку. Свойство поверки, не прибора.
+            performed_by TEXT,
 
             -- Основание для числа приёмов: gkinp_17_195_99 (3 приёма) или
             -- gkinp_03_010_03 (2 приёма). См. RunsNorm.

@@ -153,6 +153,16 @@ class StepResult extends StatelessWidget {
         ],
 
         const SizedBox(height: 16),
+        TextFormField(
+          controller: wizard.performerCtrl,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Поверку выполнил',
+            helperText: 'Попадёт в протокол. Подставляется из прошлой поверки',
+            helperMaxLines: 2,
+          ),
+        ),
+        const SizedBox(height: 12),
         // Класс работ — метаданные протокола, а не параметр расчёта:
         // на вердикт он не влияет (табл. 4 угол i не нормирует), поэтому
         // спрашивается здесь, рядом с примечаниями, а не в мастере.
