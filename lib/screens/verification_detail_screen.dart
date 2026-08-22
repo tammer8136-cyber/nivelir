@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/device.dart';
+import '../models/device_instance.dart';
 import '../models/verification.dart';
 import '../services/nivelir/algorithms/leveling_class.dart';
 import '../services/database_service.dart';
@@ -22,7 +22,7 @@ class VerificationDetailScreen extends StatefulWidget {
 
 class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
   Verification? _full;
-  Device? _device;
+  DeviceInstance? _device;
 
   @override
   void initState() {
@@ -35,7 +35,7 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
     final db = context.read<DatabaseService>();
     final id = widget.verification.id;
     final full = id == null ? widget.verification : await db.getVerification(id);
-    final device = await db.getDevice(widget.verification.deviceId);
+    final device = await db.getInstance(widget.verification.deviceId);
     if (!mounted) return;
     setState(() {
       _full = full ?? widget.verification;

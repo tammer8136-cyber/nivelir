@@ -1,12 +1,17 @@
 import '../services/nivelir/algorithms/classification.dart';
 
-class Device {
+/// МОДЕЛЬ прибора — тип, а не конкретный нивелир.
+///
+/// Здесь живут характеристики и справочная информация. Всё, что относится
+/// к конкретному прибору в работе (номер, закрепление, примечание), лежит
+/// в [DeviceInstance].
+///
+/// Характеристики экземпляра отличаться от модели не могут: нужны другие —
+/// правится модель либо заводится своя.
+class DeviceModel {
   final int? id;
   final String brand;
   final String model;
-
-  /// Серийный/инвентарный номер — свойство ЭКЗЕМПЛЯРА, не модели.
-  final String? serialNumber;
 
   final int? magnification;
   final double skoMmKm;
@@ -14,7 +19,7 @@ class Device {
   final double? minFocusM;
   final String? minFocusNote;
 
-  /// Способ исправления угла i у этого прибора:
+  /// Способ исправления угла i:
   /// 'reticle'   — перемещением сетки нитей;
   /// 'wedge'     — поворотом защитного стекла (оптический клин перед
   ///               объективом), например Н-05;
@@ -23,31 +28,34 @@ class Device {
   /// 'manual'    — по инструкции по эксплуатации (цифровые нивелиры);
   /// null        — не указан.
   ///
-  /// Источник: ГКИНП 03-010-03, приложение 9. Дословно: у нивелиров с
-  /// компенсатором при исправлениях перемещают сетку нитей или поворачивают
-  /// защитное стекло, и в описании нивелира указано, каким способом следует
-  /// исправлять угол i.
+  /// Свойство МОДЕЛИ: по ГКИНП 03-010-03, приложение 9, способ указан
+  /// в описании нивелира, то есть привязан к типу прибора.
   final String? adjustmentMethod;
 
-  /// 'catalog' — засеян из assets, характеристики не редактируются;
-  /// 'custom' — прибор, добавленный пользователем.
+  /// Справочная информация: особенности, замечания по эксплуатации.
+  final String? referenceInfo;
+
+  /// 'catalog' — засеяна из assets, характеристики не редактируются;
+  /// 'custom'  — модель, добавленная пользователем.
   final String source;
 
-  const Device({
+  const DeviceModel({
     this.id,
     required this.brand,
     required this.model,
-    this.serialNumber,
     this.magnification,
     required this.skoMmKm,
     this.compensatorType,
     this.minFocusM,
     this.minFocusNote,
     this.adjustmentMethod,
+    this.referenceInfo,
     this.source = 'custom',
   });
 
   bool get isCatalog => source == 'catalog';
+
+  String get title => '$brand $model';
 
   /// true — юстировать в поле нельзя, шаг юстировки должен это сказать
   /// вместо инструкции по сетке нитей.
@@ -82,15 +90,7 @@ class Device {
   double get tempDriftArcsecPerC =>
       DeviceClassification.tempDriftArcsecPerC(skoMmKm);
 
-  String get designationHint =>
-      DeviceClassification.designationHint(skoMmKm);
-
-  String get displayName {
-    final base = '$brand $model';
-    final serial = serialNumber?.trim();
-    if (serial == null || serial.isEmpty) return base;
-    return '$base (№ $serial)';
-  }
+  String get designationHint => DeviceClassification.designationHint(skoMmKm);
 
   String get compensatorLabel {
     switch (compensatorType) {
@@ -107,30 +107,30 @@ class Device {
     }
   }
 
-  Device copyWith({
+  DeviceModel copyWith({
     int? id,
     String? brand,
     String? model,
-    String? serialNumber,
     int? magnification,
     double? skoMmKm,
     String? compensatorType,
     double? minFocusM,
     String? minFocusNote,
     String? adjustmentMethod,
+    String? referenceInfo,
     String? source,
   }) {
-    return Device(
+    return DeviceModel(
       id: id ?? this.id,
       brand: brand ?? this.brand,
       model: model ?? this.model,
-      serialNumber: serialNumber ?? this.serialNumber,
       magnification: magnification ?? this.magnification,
       skoMmKm: skoMmKm ?? this.skoMmKm,
       compensatorType: compensatorType ?? this.compensatorType,
       minFocusM: minFocusM ?? this.minFocusM,
       minFocusNote: minFocusNote ?? this.minFocusNote,
       adjustmentMethod: adjustmentMethod ?? this.adjustmentMethod,
+      referenceInfo: referenceInfo ?? this.referenceInfo,
       source: source ?? this.source,
     );
   }
@@ -139,28 +139,28 @@ class Device {
         if (id != null) 'id': id,
         'brand': brand,
         'model': model,
-        'serial_number': serialNumber,
         'magnification': magnification,
         'sko_mm_km': skoMmKm,
         'compensator_type': compensatorType,
         'min_focus_m': minFocusM,
         'min_focus_note': minFocusNote,
         'adjustment_method': adjustmentMethod,
+        'reference_info': referenceInfo,
         'gost_class': gostClass,
         'source': source,
       };
 
-  factory Device.fromMap(Map<String, dynamic> m) => Device(
+  factory DeviceModel.fromMap(Map<String, dynamic> m) => DeviceModel(
         id: m['id'] as int?,
         brand: m['brand'] as String,
         model: m['model'] as String,
-        serialNumber: m['serial_number'] as String?,
         magnification: (m['magnification'] as num?)?.toInt(),
         skoMmKm: (m['sko_mm_km'] as num).toDouble(),
         compensatorType: m['compensator_type'] as String?,
         minFocusM: (m['min_focus_m'] as num?)?.toDouble(),
         minFocusNote: m['min_focus_note'] as String?,
         adjustmentMethod: m['adjustment_method'] as String?,
+        referenceInfo: m['reference_info'] as String?,
         source: (m['source'] as String?) ?? 'custom',
       );
 }

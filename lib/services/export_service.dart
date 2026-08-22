@@ -7,7 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../models/device.dart';
+import '../models/device_instance.dart';
 import '../models/verification.dart';
 import '../services/nivelir/algorithms/classification.dart';
 import '../services/nivelir/algorithms/leveling_class.dart';
@@ -31,7 +31,7 @@ class ExportService {
 
   static Future<pw.Document> buildProtocol({
     required Verification v,
-    Device? device,
+    DeviceInstance? device,
     required bool isMillimeters,
   }) async {
     final fonts = await _loadFonts();
@@ -184,7 +184,7 @@ class ExportService {
   /// Печать / системный диалог сохранения.
   static Future<void> printProtocol({
     required Verification v,
-    Device? device,
+    DeviceInstance? device,
     required bool isMillimeters,
   }) async {
     final pdf = await buildProtocol(
@@ -198,7 +198,7 @@ class ExportService {
   /// Сохранение во временный файл и шаринг.
   static Future<void> shareProtocol({
     required Verification v,
-    Device? device,
+    DeviceInstance? device,
     required bool isMillimeters,
   }) async {
     final pdf = await buildProtocol(

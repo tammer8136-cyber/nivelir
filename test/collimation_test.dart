@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nivelir_app/models/device.dart';
+import 'package:nivelir_app/models/device_instance.dart';
+import 'package:nivelir_app/models/device_model.dart';
 import 'package:nivelir_app/models/method_preset.dart';
 import 'package:nivelir_app/models/reminder.dart';
 import 'package:nivelir_app/services/nivelir/algorithms/classification.dart';
@@ -210,8 +211,8 @@ void main() {
     });
   });
 
-  group('Способ исправления угла i (прил. 9)', () {
-    const base = Device(brand: 'Тест', model: 'X', skoMmKm: 2.0);
+  group('Способ исправления угла i (прил. 9) — свойство модели', () {
+    const base = DeviceModel(brand: 'Тест', model: 'X', skoMmKm: 2.0);
 
     test('не указан — юстировка в поле не запрещена', () {
       expect(base.adjustmentInFieldForbidden, isFalse);
@@ -219,7 +220,7 @@ void main() {
     });
 
     test('workshop запрещает юстировку в поле', () {
-      const d = Device(
+      const d = DeviceModel(
         brand: 'Carl Zeiss',
         model: 'Ni-002',
         skoMmKm: 0.5,
@@ -229,7 +230,7 @@ void main() {
     });
 
     test('wedge не запрещает юстировку, но меняет способ', () {
-      const d = Device(
+      const d = DeviceModel(
         brand: 'Тест',
         model: 'Н-05',
         skoMmKm: 0.5,
@@ -239,14 +240,64 @@ void main() {
       expect(d.adjustmentMethodLabel, contains('защитного стекла'));
     });
 
+    test('экземпляр делегирует характеристики в модель', () {
+      const m = DeviceModel(
+        brand: 'Тест',
+        model: 'Н-05',
+        skoMmKm: 0.5,
+        magnification: 31,
+        adjustmentMethod: 'wedge',
+      );
+      const inst = DeviceInstance(
+        modelId: 1,
+        model: m,
+        serialNumber: '12345',
+        assignedTo: 'Иванов',
+      );
+      expect(inst.skoMmKm, 0.5);
+      expect(inst.magnification, 31);
+      expect(inst.adjustmentMethod, 'wedge');
+      expect(inst.gostClass, m.gostClass);
+      expect(inst.displayName, contains('12345'));
+      expect(inst.assignmentLabel, contains('Иванов'));
+    });
+
+    test('экземпляр без номера показывает просто марку и модель', () {
+      const inst = DeviceInstance(
+        modelId: 1,
+        model: DeviceModel(brand: 'Тест', model: 'X', skoMmKm: 2.0),
+      );
+      expect(inst.displayName, 'Тест X');
+      expect(inst.assignmentLabel, isNull);
+    });
+
+    test('экземпляр переживает сериализацию в БД', () {
+      const m = DeviceModel(brand: 'Тест', model: 'X', skoMmKm: 2.0, id: 7);
+      const inst = DeviceInstance(
+        id: 3,
+        modelId: 7,
+        model: m,
+        serialNumber: '999',
+        assignedTo: 'Петров',
+        notes: 'в ремонте',
+      );
+      final restored = DeviceInstance.fromMap(inst.toMap(), model: m);
+      expect(restored.modelId, 7);
+      expect(restored.serialNumber, '999');
+      expect(restored.assignedTo, 'Петров');
+      expect(restored.notes, 'в ремонте');
+      // Модель в карту экземпляра не пишется — она живёт в своей таблице.
+      expect(inst.toMap().containsKey('sko_mm_km'), isFalse);
+    });
+
     test('способ переживает сериализацию в БД', () {
-      const d = Device(
+      const d = DeviceModel(
         brand: 'Тест',
         model: 'X',
         skoMmKm: 2.0,
         adjustmentMethod: 'wedge',
       );
-      final restored = Device.fromMap(d.toMap());
+      final restored = DeviceModel.fromMap(d.toMap());
       expect(restored.adjustmentMethod, 'wedge');
     });
   });

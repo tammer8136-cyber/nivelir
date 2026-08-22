@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../models/device.dart';
+import '../../../models/device_instance.dart';
 import '../../../models/method_preset.dart';
 import '../../../services/database_service.dart';
 import '../../../services/settings_service.dart';
@@ -41,13 +41,13 @@ class _StepParamsState extends State<StepParams> {
 
     final deviceId = await SettingsService.loadLastDeviceId();
     if (deviceId != null && mounted) {
-      final device = await db.getDevice(deviceId);
+      final device = await db.getInstance(deviceId);
       if (device != null && mounted) wizard.setDevice(device);
     }
   }
 
   Future<void> _pickDevice() async {
-    final device = await Navigator.push<Device>(
+    final device = await Navigator.push<DeviceInstance>(
       context,
       MaterialPageRoute(builder: (_) => const DevicePickerScreen()),
     );

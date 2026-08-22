@@ -4,7 +4,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-import '../models/device.dart';
+import '../models/device_instance.dart';
+import '../models/device_model.dart';
 import '../models/reminder.dart';
 import '../models/verification.dart';
 
@@ -27,7 +28,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -49,28 +50,19 @@ class DatabaseService {
             "NOT NULL DEFAULT 'gkinp_17_195_99'",
           );
         }
+        if (oldVersion < 5) {
+          // Разделение приборов на модели и экземпляры. Экземпляров на этот
+          // момент ещё не существует (приложение в разработке), поэтому
+          // devices пересоздаётся, а не переносится по строкам. reminders
+          // следом: его внешний ключ смотрел на devices.
+          await db.execute('DROP TABLE IF EXISTS reminders');
+          await db.execute('DROP TABLE IF EXISTS devices');
+          await _createDeviceTables(db);
+          await _createRemindersTable(db);
+        }
       },
       onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE devices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            brand TEXT NOT NULL,
-            model TEXT NOT NULL,
-            serial_number TEXT,
-            magnification INTEGER,
-            sko_mm_km REAL NOT NULL,
-            compensator_type TEXT,
-            min_focus_m REAL,
-            min_focus_note TEXT,
-
-            -- Способ исправления угла i (ГКИНП 03-010-03, прил. 9):
-            -- reticle | wedge | workshop | manual | NULL (не указан).
-            adjustment_method TEXT,
-
-            gost_class TEXT NOT NULL,
-            source TEXT NOT NULL DEFAULT 'custom'
-          )
-        ''');
+        await _createDeviceTables(db);
 
         // Допуск угла i (10" по ГОСТ 10528-90) в таблице приборов не хранится:
         // он одинаков для всех групп и выводится из класса в коде. В таблице
@@ -143,22 +135,7 @@ class DatabaseService {
           'CREATE INDEX idx_runs_verification ON verification_runs(verification_id)',
         );
 
-        await db.execute('''
-          CREATE TABLE reminders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            device_id INTEGER NOT NULL UNIQUE,
-            enabled INTEGER NOT NULL DEFAULT 0,
-            interval_kind TEXT NOT NULL DEFAULT 'month',
-            interval_count INTEGER NOT NULL DEFAULT 6,
-            day_of_week INTEGER,
-            day_of_month INTEGER,
-            month_of_year INTEGER,
-            hour INTEGER NOT NULL DEFAULT 9,
-            minute INTEGER NOT NULL DEFAULT 0,
-            next_fire_at TEXT,
-            FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
-          )
-        ''');
+        await _createRemindersTable(db);
       },
     );
 
@@ -166,17 +143,83 @@ class DatabaseService {
     return db;
   }
 
+  /// Справочник моделей и список экземпляров.
+  Future<void> _createDeviceTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE device_models (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        brand TEXT NOT NULL,
+        model TEXT NOT NULL,
+        magnification INTEGER,
+        sko_mm_km REAL NOT NULL,
+        compensator_type TEXT,
+        min_focus_m REAL,
+        min_focus_note TEXT,
+
+        -- Способ исправления угла i (ГКИНП 03-010-03, прил. 9):
+        -- reticle | wedge | workshop | manual | NULL (не указан).
+        -- Свойство модели: способ указан в описании нивелира.
+        adjustment_method TEXT,
+
+        reference_info TEXT,
+        gost_class TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'custom'
+      )
+    ''');
+
+    // Экземпляр держит только учётные данные. Удаление модели, у которой
+    // есть экземпляры, запрещено внешним ключом: иначе прибор остался бы
+    // без характеристик.
+    await db.execute('''
+      CREATE TABLE device_instances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        model_id INTEGER NOT NULL,
+        serial_number TEXT,
+        assigned_to TEXT,
+        notes TEXT,
+        FOREIGN KEY (model_id)
+          REFERENCES device_models(id) ON DELETE RESTRICT
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX idx_instances_model ON device_instances(model_id)',
+    );
+  }
+
+  Future<void> _createRemindersTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id INTEGER NOT NULL UNIQUE,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        interval_kind TEXT NOT NULL DEFAULT 'month',
+        interval_count INTEGER NOT NULL DEFAULT 6,
+        day_of_week INTEGER,
+        day_of_month INTEGER,
+        month_of_year INTEGER,
+        hour INTEGER NOT NULL DEFAULT 9,
+        minute INTEGER NOT NULL DEFAULT 0,
+        next_fire_at TEXT,
+        FOREIGN KEY (device_id)
+          REFERENCES device_instances(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
   // ==========================================================================
   // СИД КАТАЛОГА
   // ==========================================================================
 
-  /// Каталог засевается один раз при первом запуске. Класс НЕ берётся из
-  /// JSON — считается из СКО через Device, чтобы правило жило в одном месте.
-  /// В JSON поля gost_class и i_angle_tolerance_arcsec остались от прежней
-  /// (уровенной) классификации и сознательно игнорируются.
+  /// Каталог моделей засевается один раз при первом запуске. Класс НЕ
+  /// берётся из JSON — считается из СКО через DeviceModel, чтобы правило
+  /// жило в одном месте. Поля gost_class и i_angle_tolerance_arcsec в JSON
+  /// остались от прежней (уровенной) классификации и игнорируются.
   Future<void> _seedCatalogIfNeeded(Database db) async {
     final existing = Sqflite.firstIntValue(
-      await db.rawQuery("SELECT COUNT(*) FROM devices WHERE source = 'catalog'"),
+      await db.rawQuery(
+        "SELECT COUNT(*) FROM device_models WHERE source = 'catalog'",
+      ),
     );
     if (existing != null && existing > 0) return;
 
@@ -187,61 +230,162 @@ class DatabaseService {
 
       final batch = db.batch();
       for (final item in items) {
-        final device = Device.fromMap({...item, 'source': 'catalog'});
-        batch.insert('devices', device.toMap());
+        final model = DeviceModel.fromMap({...item, 'source': 'catalog'});
+        batch.insert('device_models', model.toMap());
       }
       await batch.commit(noResult: true);
     } catch (e) {
       // Отсутствие ассета не должно ронять запуск — справочник просто пуст,
-      // пользователь добавит свои приборы вручную.
+      // пользователь добавит свои модели вручную.
       // ignore: avoid_print
-      print('Не удалось загрузить каталог приборов: $e');
+      print('Не удалось загрузить каталог моделей: $e');
     }
   }
 
   // ==========================================================================
-  // ПРИБОРЫ
+  // СПРАВОЧНИК МОДЕЛЕЙ
   // ==========================================================================
 
-  Future<List<Device>> getDevices({String? search}) async {
+  Future<List<DeviceModel>> getModels({String? search}) async {
     final db = await database;
     final hasSearch = search != null && search.isNotEmpty;
     final rows = await db.query(
-      'devices',
-      where: hasSearch
-          ? 'brand LIKE ? OR model LIKE ? OR serial_number LIKE ?'
-          : null,
-      whereArgs: hasSearch ? ['%$search%', '%$search%', '%$search%'] : null,
-      orderBy: 'source ASC, brand ASC, model ASC',
+      'device_models',
+      where: hasSearch ? 'brand LIKE ? OR model LIKE ?' : null,
+      whereArgs: hasSearch ? ['%$search%', '%$search%'] : null,
+      orderBy: 'brand ASC, model ASC',
     );
-    return rows.map(Device.fromMap).toList();
+    return rows.map(DeviceModel.fromMap).toList();
   }
 
-  Future<Device?> getDevice(int id) async {
+  Future<DeviceModel?> getModel(int id) async {
     final db = await database;
-    final rows = await db.query('devices', where: 'id = ?', whereArgs: [id]);
-    return rows.isEmpty ? null : Device.fromMap(rows.first);
+    final rows =
+        await db.query('device_models', where: 'id = ?', whereArgs: [id]);
+    return rows.isEmpty ? null : DeviceModel.fromMap(rows.first);
   }
 
-  Future<int> insertDevice(Device device) async {
+  /// Уникальные марки — первая шторка в форме экземпляра.
+  Future<List<String>> getBrands() async {
     final db = await database;
-    return db.insert('devices', device.toMap());
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT brand FROM device_models ORDER BY brand ASC',
+    );
+    return rows.map((r) => r['brand'] as String).toList();
   }
 
-  Future<int> updateDevice(Device device) async {
+  /// Модели одной марки — вторая шторка, зависит от первой.
+  Future<List<DeviceModel>> getModelsByBrand(String brand) async {
+    final db = await database;
+    final rows = await db.query(
+      'device_models',
+      where: 'brand = ?',
+      whereArgs: [brand],
+      orderBy: 'model ASC',
+    );
+    return rows.map(DeviceModel.fromMap).toList();
+  }
+
+  Future<int> insertModel(DeviceModel model) async {
+    final db = await database;
+    return db.insert('device_models', model.toMap());
+  }
+
+  Future<int> updateModel(DeviceModel model) async {
     final db = await database;
     return db.update(
-      'devices',
-      device.toMap(),
+      'device_models',
+      model.toMap(),
       where: 'id = ?',
-      whereArgs: [device.id],
+      whereArgs: [model.id],
     );
   }
 
-  /// Удаление без ограничений и подтверждений — даже при наличии истории.
-  Future<void> deleteDevice(int id) async {
+  /// Сколько экземпляров ссылается на модель. Ноль — модель можно удалять.
+  Future<int> countInstancesOfModel(int modelId) async {
     final db = await database;
-    await db.delete('devices', where: 'id = ?', whereArgs: [id]);
+    return Sqflite.firstIntValue(
+          await db.rawQuery(
+            'SELECT COUNT(*) FROM device_instances WHERE model_id = ?',
+            [modelId],
+          ),
+        ) ??
+        0;
+  }
+
+  /// Удаление модели, на которую ссылаются экземпляры, отклоняется: иначе
+  /// приборы остались бы без характеристик. Внешний ключ это тоже не
+  /// пропустит, но лучше сказать об этом до попытки.
+  Future<bool> deleteModel(int id) async {
+    if (await countInstancesOfModel(id) > 0) return false;
+    final db = await database;
+    await db.delete('device_models', where: 'id = ?', whereArgs: [id]);
+    return true;
+  }
+
+  // ==========================================================================
+  // СВОИ ПРИБОРЫ (ЭКЗЕМПЛЯРЫ)
+  // ==========================================================================
+
+  /// Экземпляры вместе с моделями: одним запросом с JOIN, чтобы не делать
+  /// выборку модели на каждую строку списка.
+  Future<List<DeviceInstance>> getInstances({String? search}) async {
+    final db = await database;
+    final hasSearch = search != null && search.isNotEmpty;
+
+    final rows = await db.rawQuery('''
+      SELECT i.*, m.id AS m_id, m.brand, m.model, m.magnification,
+             m.sko_mm_km, m.compensator_type, m.min_focus_m, m.min_focus_note,
+             m.adjustment_method, m.reference_info, m.source
+      FROM device_instances i
+      JOIN device_models m ON m.id = i.model_id
+      ${hasSearch ? 'WHERE m.brand LIKE ? OR m.model LIKE ? OR i.serial_number LIKE ? OR i.assigned_to LIKE ?' : ''}
+      ORDER BY m.brand ASC, m.model ASC, i.serial_number ASC
+    ''', hasSearch ? ['%$search%', '%$search%', '%$search%', '%$search%'] : null);
+
+    return rows.map(_instanceFromJoin).toList();
+  }
+
+  Future<DeviceInstance?> getInstance(int id) async {
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT i.*, m.id AS m_id, m.brand, m.model, m.magnification,
+             m.sko_mm_km, m.compensator_type, m.min_focus_m, m.min_focus_note,
+             m.adjustment_method, m.reference_info, m.source
+      FROM device_instances i
+      JOIN device_models m ON m.id = i.model_id
+      WHERE i.id = ?
+    ''', [id]);
+    return rows.isEmpty ? null : _instanceFromJoin(rows.first);
+  }
+
+  /// Разбор строки JOIN: колонки модели идут под своими именами, её id —
+  /// под псевдонимом m_id, чтобы не перекрыть id экземпляра.
+  DeviceInstance _instanceFromJoin(Map<String, dynamic> row) {
+    final model = DeviceModel.fromMap({...row, 'id': row['m_id']});
+    return DeviceInstance.fromMap(row, model: model);
+  }
+
+  Future<int> insertInstance(DeviceInstance instance) async {
+    final db = await database;
+    return db.insert('device_instances', instance.toMap());
+  }
+
+  Future<int> updateInstance(DeviceInstance instance) async {
+    final db = await database;
+    return db.update(
+      'device_instances',
+      instance.toMap(),
+      where: 'id = ?',
+      whereArgs: [instance.id],
+    );
+  }
+
+  /// Удаление экземпляра не трогает его поверки: протоколы остаются
+  /// в истории, они денормализованы по device_label.
+  Future<void> deleteInstance(int id) async {
+    final db = await database;
+    await db.delete('device_instances', where: 'id = ?', whereArgs: [id]);
   }
 
   // ==========================================================================

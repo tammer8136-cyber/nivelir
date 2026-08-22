@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../models/device.dart';
+import '../models/device_instance.dart';
 import '../models/method_preset.dart';
 import '../models/verification.dart';
 import '../services/database_service.dart';
@@ -93,8 +93,8 @@ class WizardState extends ChangeNotifier {
   final station1FormKey = GlobalKey<FormState>();
   final station2FormKey = GlobalKey<FormState>();
 
-  Device? _device;
-  Device? get device => _device;
+  DeviceInstance? _device;
+  DeviceInstance? get device => _device;
 
   MethodPreset _preset = MethodPreset.all.first;
   MethodPreset get preset => _preset;
@@ -157,7 +157,7 @@ class WizardState extends ChangeNotifier {
   // ПАРАМЕТРЫ
   // ==========================================================================
 
-  void setDevice(Device? device) {
+  void setDevice(DeviceInstance? device) {
     _device = device;
     notifyListeners();
   }

@@ -128,7 +128,7 @@ class NotificationService {
 
     final reminders = await db.getEnabledReminders();
     for (final reminder in reminders) {
-      final device = await db.getDevice(reminder.deviceId);
+      final device = await db.getInstance(reminder.deviceId);
       if (device == null) continue;
       await schedule(reminder, device.displayName);
     }
