@@ -11,7 +11,6 @@ import '../../utils/units.dart';
 import '../verification_detail_screen.dart';
 import 'instance_form_screen.dart';
 import 'model_detail_screen.dart';
-import 'reminder_editor.dart';
 
 /// Карточка СВОЕГО ПРИБОРА: учётные данные, история поверок, напоминания.
 ///
@@ -68,43 +67,6 @@ class _InstanceDetailScreenState extends State<InstanceDetailScreen> {
     await db.deleteInstance(_instance.id!);
     if (!mounted) return;
     Navigator.pop(context);
-  }
-
-  Future<void> _editReminder() async {
-    final result = await showModalBottomSheet<Reminder>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => ReminderEditor(
-        deviceId: _instance.id!,
-        initial: _reminder,
-      ),
-    );
-    if (result == null || !mounted) return;
-
-    final db = context.read<DatabaseService>();
-    final next = result.enabled
-        ? result.copyWith(nextFireAt: result.computeNextFire(DateTime.now()))
-        : result;
-
-    await db.saveReminder(next);
-
-    if (next.enabled) {
-      final granted = await NotificationService.instance.requestPermissions();
-      if (granted) {
-        await NotificationService.instance
-            .schedule(next, _instance.displayName);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Уведомления запрещены в настройках системы'),
-          ),
-        );
-      }
-    } else {
-      await NotificationService.instance.cancel(next);
-    }
-
-    if (mounted) setState(() => _reminder = next);
   }
 
   @override
@@ -185,6 +147,9 @@ class _InstanceDetailScreenState extends State<InstanceDetailScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          // Напоминание настраивается в разделе «К поверке» — здесь только
+          // показывается текущее состояние. Один орган управления в одном
+          // месте, иначе два экрана правят одно и то же.
           Card(
             margin: EdgeInsets.zero,
             child: ListTile(
@@ -199,12 +164,10 @@ class _InstanceDetailScreenState extends State<InstanceDetailScreen> {
               title: const Text('Напоминание о поверке'),
               subtitle: Text(
                 _reminder?.enabled == true
-                    ? _reminder!.intervalLabel
-                    : 'Выключено',
+                    ? '${_reminder!.intervalLabel} · настраивается в разделе «К поверке»'
+                    : 'Выключено · настраивается в разделе «К поверке»',
                 style: const TextStyle(fontSize: 12),
               ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _editReminder,
             ),
           ),
           const SizedBox(height: 20),

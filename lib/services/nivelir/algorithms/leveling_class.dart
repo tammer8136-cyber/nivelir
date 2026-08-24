@@ -23,7 +23,14 @@ class LevelingClassRequirements {
   final double maxSkoMmKm;
 
   /// Увеличение зрительной трубы, крат, не менее.
+  ///
+  /// Для проверки берётся это число. Для показа пользователю есть
+  /// [magnificationLabel]: у IV класса в табл. 4 стоит не одно значение,
+  /// а диапазон «20-22», и подменять его одним числом в тексте нельзя.
   final int minMagnification;
+
+  /// Как требование к увеличению записано в табл. 4.
+  final String magnificationLabel;
 
   /// Диапазон работы компенсатора, угл. мин, не менее.
   final double minCompensatorRangeArcmin;
@@ -35,6 +42,7 @@ class LevelingClassRequirements {
     required this.levelingClass,
     required this.maxSkoMmKm,
     required this.minMagnification,
+    required this.magnificationLabel,
     required this.minCompensatorRangeArcmin,
     required this.maxTempDriftArcsec,
   });
@@ -44,6 +52,7 @@ class LevelingClassRequirements {
       levelingClass: 1,
       maxSkoMmKm: 0.5,
       minMagnification: 40,
+      magnificationLabel: '40',
       minCompensatorRangeArcmin: 8,
       maxTempDriftArcsec: 0.5,
     ),
@@ -51,6 +60,7 @@ class LevelingClassRequirements {
       levelingClass: 2,
       maxSkoMmKm: 1.5,
       minMagnification: 40,
+      magnificationLabel: '40',
       minCompensatorRangeArcmin: 8,
       maxTempDriftArcsec: 0.5,
     ),
@@ -58,15 +68,17 @@ class LevelingClassRequirements {
       levelingClass: 3,
       maxSkoMmKm: 3.0,
       minMagnification: 24,
+      magnificationLabel: '24',
       minCompensatorRangeArcmin: 15,
       maxTempDriftArcsec: 0.8,
     ),
     LevelingClassRequirements(
       levelingClass: 4,
-      // Табл. 4 даёт для IV класса увеличение 20-22 крат; берём нижнюю
-      // границу как «не менее».
       maxSkoMmKm: 6.0,
+      // Табл. 4 даёт для IV класса диапазон «20-22» крат. Для проверки
+      // берём нижнюю границу как «не менее», а показываем диапазон.
       minMagnification: 20,
+      magnificationLabel: '20-22',
       minCompensatorRangeArcmin: 15,
       maxTempDriftArcsec: 0.8,
     ),

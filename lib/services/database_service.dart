@@ -499,6 +499,18 @@ class DatabaseService {
     return rows.isEmpty ? null : Reminder.fromMap(rows.first);
   }
 
+  /// Все напоминания разом: ключ — id экземпляра. Нужно для раздела
+  /// «К поверке», где на каждый прибор смотрится его срок; по одному
+  /// запросу на строку список тормозил бы.
+  Future<Map<int, Reminder>> getAllReminders() async {
+    final db = await database;
+    final rows = await db.query('reminders');
+    return {
+      for (final row in rows)
+        (row['device_id'] as num).toInt(): Reminder.fromMap(row),
+    };
+  }
+
   Future<List<Reminder>> getEnabledReminders() async {
     final db = await database;
     final rows = await db.query('reminders', where: 'enabled = 1');

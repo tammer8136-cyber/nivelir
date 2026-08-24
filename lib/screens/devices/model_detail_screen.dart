@@ -247,7 +247,7 @@ class _ModelDetailScreenState extends State<ModelDetailScreen> {
                   Expanded(
                     child: Text(
                       'СКП ≤ ${req.maxSkoMmKm} мм/км, '
-                      'увеличение ≥ ${req.minMagnification}×',
+                      'увеличение ≥ ${req.magnificationLabel}×',
                       style: const TextStyle(
                           fontSize: 12, color: AppTheme.textSecondary),
                     ),
@@ -269,8 +269,11 @@ class _ModelDetailScreenState extends State<ModelDetailScreen> {
         ),
         const SizedBox(height: 6),
         const Text(
-          'Диапазон компенсатора и температурный дрейф угла i табл. 4 тоже '
-          'нормирует, но приложение их не измеряет.',
+          'Проверены только СКП и увеличение. Табл. 4 нормирует ещё диапазон '
+          'компенсатора, дрейф угла i от температуры, СКП установки линии '
+          'визирования, систематическую погрешность компенсатора, цену '
+          'деления цилиндрического уровня и оптического микрометра, '
+          'коэффициент нитяного дальномера — приложение их не измеряет.',
           style: TextStyle(
               fontSize: 11, color: AppTheme.textSecondary, height: 1.3),
         ),

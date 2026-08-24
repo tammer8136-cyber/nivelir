@@ -5,6 +5,7 @@ import '../../../data/help_articles.dart';
 import '../../../state/app_settings.dart';
 import '../../../state/wizard_state.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/diagrams/level_diagrams.dart';
 
 /// Шаг 0 — не вычисляемый. Поверка угла i бессмысленна при сбитом круглом
 /// уровне: компенсатор работает на пределе диапазона (обычно ±15′).
@@ -39,6 +40,10 @@ class StepPreflight extends StatelessWidget {
           summary:
               'Повернуть трубу на 180°. Пузырёк ушёл из центра — нужна юстировка.',
           details: HelpArticles.roundLevelInstrument,
+          diagrams: const [
+            RoundLevelCheckDiagram(),
+            HalfRuleDiagram(),
+          ],
         ),
         _checkCard(
           context,
@@ -47,6 +52,7 @@ class StepPreflight extends StatelessWidget {
           summary:
               'Совместить ребро рейки с отвесной нитью сетки, выверить уровень рейки.',
           details: HelpArticles.roundLevelRod,
+          diagrams: const [RodLevelDiagram()],
         ),
         const SizedBox(height: 8),
         CheckboxListTile(
@@ -81,6 +87,7 @@ class StepPreflight extends StatelessWidget {
     required String title,
     required String summary,
     required String details,
+    required List<Widget> diagrams,
   }) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -94,6 +101,10 @@ class StepPreflight extends StatelessWidget {
           expandedCrossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(details, style: const TextStyle(height: 1.45)),
+            for (final d in diagrams) ...[
+              const SizedBox(height: 16),
+              d,
+            ],
           ],
         ),
       ),

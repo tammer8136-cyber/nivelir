@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nivelir_app/data/help_articles.dart';
 import 'package:nivelir_app/models/device_instance.dart';
 import 'package:nivelir_app/models/device_model.dart';
 import 'package:nivelir_app/models/method_preset.dart';
@@ -333,6 +334,94 @@ void main() {
     });
   });
 
+  group('Расчёт даты напоминания', () {
+    Reminder r(String kind, int count,
+            {int? dayOfWeek, int? dayOfMonth, int? monthOfYear}) =>
+        Reminder(
+          deviceId: 1,
+          enabled: true,
+          intervalKind: kind,
+          intervalCount: count,
+          dayOfWeek: dayOfWeek,
+          dayOfMonth: dayOfMonth,
+          monthOfYear: monthOfYear,
+          hour: 9,
+        );
+
+    test('дни: ровно N суток вперёд', () {
+      final next = r('day', 15).computeNextFire(DateTime(2026, 3, 10, 12));
+      expect(next, DateTime(2026, 3, 25, 9));
+    });
+
+    test('дни: интервал не зависит от того, прошёл ли час постановки', () {
+      final before = r('day', 15).computeNextFire(DateTime(2026, 3, 10, 8));
+      final after = r('day', 15).computeNextFire(DateTime(2026, 3, 10, 20));
+      expect(before, after);
+    });
+
+    test('недели: раз в неделю — через семь дней, а не завтра', () {
+      final next = r('week', 1).computeNextFire(DateTime(2026, 3, 10, 12));
+      expect(next, DateTime(2026, 3, 17, 9));
+    });
+
+    test('недели: с заданным днём недели попадает на этот день', () {
+      // 10 марта 2026 — вторник. Ближайшая пятница — 13-е.
+      final next =
+          r('week', 1, dayOfWeek: DateTime.friday).computeNextFire(
+        DateTime(2026, 3, 10, 12),
+      );
+      expect(next, DateTime(2026, 3, 13, 9));
+      expect(next.weekday, DateTime.friday);
+    });
+
+    test('недели: испорченный день недели не вешает расчёт', () {
+      final next = r('week', 1, dayOfWeek: 99)
+          .computeNextFire(DateTime(2026, 3, 10, 12));
+      expect(next, isNotNull);
+    });
+
+    test('месяцы: 31 января + месяц обрезается до конца февраля', () {
+      final next = r('month', 1).computeNextFire(DateTime(2026, 1, 31, 12));
+      expect(next, DateTime(2026, 2, 28, 9));
+    });
+
+    test('месяцы: в високосном году обрезается до 29 февраля', () {
+      final next = r('month', 1).computeNextFire(DateTime(2028, 1, 31, 12));
+      expect(next, DateTime(2028, 2, 29, 9));
+    });
+
+    test('месяцы: переход через год', () {
+      final next = r('month', 6).computeNextFire(DateTime(2026, 10, 15, 12));
+      expect(next, DateTime(2027, 4, 15, 9));
+    });
+
+    test('месяцы: 31-е число сохраняется там, где месяц длинный', () {
+      final next = r('month', 2).computeNextFire(DateTime(2026, 1, 31, 12));
+      expect(next, DateTime(2026, 3, 31, 9));
+    });
+
+    test('годы: 29 февраля обрезается до 28-го в невисокосном', () {
+      final next = r('year', 1).computeNextFire(DateTime(2028, 2, 29, 12));
+      expect(next, DateTime(2029, 2, 28, 9));
+    });
+
+    test('годы: обычный сдвиг на год', () {
+      final next = r('year', 1).computeNextFire(DateTime(2026, 7, 4, 12));
+      expect(next, DateTime(2027, 7, 4, 9));
+    });
+
+    test('срабатывание всегда в будущем', () {
+      final from = DateTime(2026, 3, 10, 23, 59);
+      for (final kind in ['day', 'week', 'month', 'year']) {
+        for (final count in [1, 2, 3]) {
+          final next = r(kind, count).computeNextFire(from);
+          expect(next.isAfter(from), isTrue,
+              reason: '$kind x$count дало $next');
+        }
+      }
+    });
+  });
+
   group('Периодичность поверки (ГКИНП 03-010-03, п. 21.4.2)', () {
     test('интервал 15 дней не выражается через недели или месяцы', () {
       // Проверка того, что пресет обязан жить в единице "день":
@@ -366,6 +455,71 @@ void main() {
       final from = DateTime(2026, 3, 10, 12, 0);
       final next = r.computeNextFire(from);
       expect(next.difference(DateTime(2026, 3, 10, 9, 0)).inDays, 15);
+    });
+  });
+
+  group('Справка: ссылки на документы не потерялись', () {
+    String bodyOf(String id) => HelpArticles.byId(id).body;
+
+    test('статья о классах ссылается на действующий ГОСТ Р 53340-2009', () {
+      final body = bodyOf('classes');
+      expect(body, contains('ГОСТ Р 53340-2009'));
+      // Числовые границы по-прежнему из ГОСТ 10528-90 — статья обязана это
+      // говорить, иначе читатель уйдёт искать их в 53340.
+      expect(body, contains('ГОСТ 10528-90'));
+    });
+
+    test('в статье о температуре есть рабочий диапазон прибора', () {
+      expect(bodyOf('temperature'), contains('ГОСТ Р 53340-2009'));
+    });
+
+    test('на недействующий сборник 1985 года нет ссылок как на источник',
+        () {
+      for (final a in HelpArticles.all) {
+        final mentions = a.body.contains('17-196-85');
+        if (mentions) {
+          // Упоминать можно только как утративший силу.
+          expect(a.body, contains('утратил силу'), reason: a.id);
+        }
+      }
+    });
+  });
+
+  group('Табл. 4 ГКИНП 03-010-03: сверено с документом', () {
+    test('СКП по классам: 0,5 / 1,5 / 3 / 6 мм на 1 км двойного хода', () {
+      expect(LevelingClassRequirements.byClass(1).maxSkoMmKm, 0.5);
+      expect(LevelingClassRequirements.byClass(2).maxSkoMmKm, 1.5);
+      expect(LevelingClassRequirements.byClass(3).maxSkoMmKm, 3.0);
+      expect(LevelingClassRequirements.byClass(4).maxSkoMmKm, 6.0);
+    });
+
+    test('увеличение: 40 на I и II, 24 на III, 20-22 на IV', () {
+      expect(LevelingClassRequirements.byClass(1).minMagnification, 40);
+      expect(LevelingClassRequirements.byClass(2).minMagnification, 40);
+      expect(LevelingClassRequirements.byClass(3).minMagnification, 24);
+      // На IV классе норма даёт диапазон: проверяем по нижней границе,
+      // показываем диапазон целиком.
+      expect(LevelingClassRequirements.byClass(4).minMagnification, 20);
+      expect(
+          LevelingClassRequirements.byClass(4).magnificationLabel, '20-22');
+    });
+
+    test('диапазон компенсатора: ±8′ на I и II, ±15′ на III и IV', () {
+      expect(
+          LevelingClassRequirements.byClass(1).minCompensatorRangeArcmin, 8);
+      expect(
+          LevelingClassRequirements.byClass(2).minCompensatorRangeArcmin, 8);
+      expect(
+          LevelingClassRequirements.byClass(3).minCompensatorRangeArcmin, 15);
+      expect(
+          LevelingClassRequirements.byClass(4).minCompensatorRangeArcmin, 15);
+    });
+
+    test('дрейф угла i на 1 °С: 0,5″ на I и II, 0,8″ на III и IV', () {
+      expect(LevelingClassRequirements.byClass(1).maxTempDriftArcsec, 0.5);
+      expect(LevelingClassRequirements.byClass(2).maxTempDriftArcsec, 0.5);
+      expect(LevelingClassRequirements.byClass(3).maxTempDriftArcsec, 0.8);
+      expect(LevelingClassRequirements.byClass(4).maxTempDriftArcsec, 0.8);
     });
   });
 

@@ -10,6 +10,7 @@ import 'devices/devices_list_screen.dart';
 import 'help/help_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
+import 'upcoming_screen.dart';
 import 'verification_detail_screen.dart';
 import 'wizard/wizard_screen.dart';
 
@@ -85,6 +86,18 @@ class _HomeScreenState extends State<HomeScreen> {
               await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const DevicesListScreen()),
+              );
+              if (mounted) setState(_reload);
+            },
+          ),
+          _tile(
+            icon: Icons.notifications_active_outlined,
+            title: 'К поверке',
+            subtitle: 'Сроки и напоминания по приборам',
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const UpcomingScreen()),
               );
               if (mounted) setState(_reload);
             },

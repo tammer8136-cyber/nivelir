@@ -61,44 +61,95 @@ class Reminder {
   }
 
   /// Следующее срабатывание от заданной точки отсчёта.
+  ///
+  /// Правило одно на все единицы: дата [from] плюс интервал, во столько-то
+  /// часов. Никаких «минус один», потому что смешивать сдвиг на день со
+  /// сдвигом на неделю нельзя — раньше «раз в неделю» давало срабатывание
+  /// на следующий день, а не через семь.
+  ///
+  /// Для недельного интервала с заданным днём недели точка отсчёта иная:
+  /// ближайший нужный день недели, затем целые недели.
   DateTime computeNextFire(DateTime from) {
-    var base = DateTime(from.year, from.month, from.day, hour, minute);
-    if (!base.isAfter(from)) {
-      base = base.add(const Duration(days: 1));
-    }
-
     switch (intervalKind) {
       case 'day':
-        return base.add(Duration(days: intervalCount - 1));
+        return _atTime(
+          DateTime(from.year, from.month, from.day)
+              .add(Duration(days: intervalCount)),
+        );
+
       case 'week':
-        var d = base;
-        if (dayOfWeek != null) {
-          while (d.weekday != dayOfWeek) {
+        final wd = dayOfWeek;
+        if (wd != null && wd >= 1 && wd <= 7) {
+          // Ближайший нужный день недели, начиная со следующего дня.
+          var d = DateTime(from.year, from.month, from.day)
+              .add(const Duration(days: 1));
+          // Ограничитель обязателен: при испорченном dayOfWeek вне 1..7
+          // цикл был бы бесконечным.
+          for (var i = 0; i < 7 && d.weekday != wd; i++) {
             d = d.add(const Duration(days: 1));
           }
+          return _atTime(d.add(Duration(days: 7 * (intervalCount - 1))));
         }
-        return d.add(Duration(days: 7 * (intervalCount - 1)));
+        return _atTime(
+          DateTime(from.year, from.month, from.day)
+              .add(Duration(days: 7 * intervalCount)),
+        );
+
       case 'month':
-        final target = DateTime(
-          from.year,
-          from.month + intervalCount,
-          dayOfMonth ?? from.day,
-          hour,
-          minute,
-        );
-        return target;
+        return _shiftMonths(from, intervalCount, dayOfMonth ?? from.day);
+
       case 'year':
-        return DateTime(
-          from.year + intervalCount,
-          monthOfYear ?? from.month,
+        return _shiftMonths(
+          from,
+          12 * intervalCount,
           dayOfMonth ?? from.day,
-          hour,
-          minute,
+          monthOfYear: monthOfYear,
         );
+
       default:
-        return base;
+        return _atTime(
+          DateTime(from.year, from.month, from.day)
+              .add(const Duration(days: 1)),
+        );
     }
   }
+
+  DateTime _atTime(DateTime day) =>
+      DateTime(day.year, day.month, day.day, hour, minute);
+
+  /// Сдвиг на целое число месяцев с ОБРЕЗКОЙ дня по длине месяца.
+  ///
+  /// Без обрезки Dart переносит переполнение вперёд: DateTime(2026, 2, 31)
+  /// даёт 3 марта. Для напоминания, поставленного 31 января, это означало
+  /// бы уход на начало марта вместо конца февраля.
+  DateTime _shiftMonths(
+    DateTime from,
+    int months,
+    int day, {
+    int? monthOfYear,
+  }) {
+    var year = from.year;
+    var month = (monthOfYear ?? from.month) + months;
+
+    // Приведение месяца к 1..12 вручную: полагаться на нормализацию Dart
+    // здесь нельзя, день обрезается по УЖЕ известному месяцу.
+    year += (month - 1) ~/ 12;
+    month = (month - 1) % 12 + 1;
+
+    final lastDay = _daysInMonth(year, month);
+    final safeDay = day > lastDay ? lastDay : day;
+
+    return DateTime(year, month, safeDay, hour, minute);
+  }
+
+  static int _daysInMonth(int year, int month) {
+    const lengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (month == 2 && _isLeap(year)) return 29;
+    return lengths[month - 1];
+  }
+
+  static bool _isLeap(int y) =>
+      (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
 
   Reminder copyWith({
     int? id,
