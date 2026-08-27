@@ -29,6 +29,9 @@ class ExcelExportService {
     'Размах, ″',
     'Предел размаха, ″',
     'Допуск, ″',
+    'Допуск, мм',
+    'Основание допуска',
+    'Происхождение допуска',
     'Знаменатель, м',
     'Превышение A−B',
     'Вердикт',
@@ -53,8 +56,12 @@ class ExcelExportService {
       TextCellValue('Журнал поверок нивелиров (отсчёты в $unit)'),
     ]);
     sheet.appendRow([
-      TextCellValue('Допуск угла i — ГОСТ 10528-90 п. 2.3 и ГКИНП 17-195-99 п. 4.2.5. '
-          'Предел расхождения приёмов — ГКИНП 03-010-03, приложение 9.'),
+      TextCellValue(
+          'Единой нормы на полевое определение угла i не существует. Допуск '
+          'берётся из РЭ конкретной модели; столбец «Происхождение допуска» '
+          'называет источник каждого числа. 10″ по ГОСТ 10528-90 п. 2.3 — '
+          'лабораторная характеристика прибора, в вердикте не участвует. '
+          'Предел расхождения приёмов показан справочно.'),
     ]);
     sheet.appendRow([TextCellValue('')]);
     sheet.appendRow(_headers.map(TextCellValue.new).toList());
@@ -98,6 +105,11 @@ class ExcelExportService {
               : DoubleCellValue(r2(v.spreadArcsec!)),
           DoubleCellValue(v.spreadLimitArcsec),
           DoubleCellValue(v.toleranceArcsecSnapshot),
+          v.toleranceMmSnapshot == null
+              ? TextCellValue('—')
+              : DoubleCellValue(v.toleranceMmSnapshot!),
+          TextCellValue(v.toleranceBasisLabel),
+          TextCellValue(v.toleranceProvenanceSnapshot),
           DoubleCellValue(v.distanceDiffM.abs()),
           DoubleCellValue(conv(v.hTrueMm)),
           TextCellValue(v.isPass ? 'в допуске' : 'вне допуска'),

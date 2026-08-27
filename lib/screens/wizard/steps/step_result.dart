@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../services/nivelir/algorithms/collimation.dart';
 import '../../../state/app_settings.dart';
 import '../../../state/wizard_state.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/units.dart';
+
+String _toleranceText(CollimationResult r) {
+  final mm = r.tolerance.toleranceMm;
+  if (r.tolerance.comparesInMillimetres && mm != null) {
+    final t = mm == mm.roundToDouble() ? mm.toStringAsFixed(0) : '$mm';
+    return '$t мм по РЭ';
+  }
+  return Units.arcsec(r.toleranceArcsec);
+}
 
 class StepResult extends StatelessWidget {
   const StepResult({super.key});
@@ -45,9 +55,8 @@ class StepResult extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 pass
-                    ? 'В допуске ${Units.arcsec(result.toleranceArcsec)} '
-                        '(ГОСТ 10528-90 п. 2.3, ГКИНП 17-195-99 п. 4.2.5)'
-                    : 'Вне допуска ${Units.arcsec(result.toleranceArcsec)} — '
+                    ? 'В допуске ${_toleranceText(result)}'
+                    : 'Вне допуска ${_toleranceText(result)} — '
                         'требуется юстировка',
                 style: TextStyle(color: color, fontWeight: FontWeight.w600),
                 textAlign: TextAlign.center,
@@ -122,7 +131,18 @@ class StepResult extends StatelessWidget {
                       '(предел ${Units.arcsec(result.spreadLimitArcsec)})'),
                 const Divider(height: 20),
                 _row('Угол i (среднее)', Units.signedArcsec(result.iArcsec)),
-                _row('Допуск ГОСТ', Units.arcsec(result.toleranceArcsec)),
+                if (result.tolerance.comparesInMillimetres)
+                  _row('Расхождение (a2−b2)−(a1−b1)',
+                      '${result.deltaMm.toStringAsFixed(1)} мм'),
+                _row('Допуск', _toleranceText(result)),
+                _row('Основание', result.tolerance.basisLabel),
+                const SizedBox(height: 6),
+                // Провенанс целиком: приложение не ссылается на норму,
+                // а называет источник числа. Пользователь должен видеть
+                // то же, что уйдёт в протокол.
+                Text(result.tolerance.provenance,
+                    style: const TextStyle(
+                        fontSize: 11, color: AppTheme.textSecondary)),
               ],
             ),
           ),

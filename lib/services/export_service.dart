@@ -67,8 +67,8 @@ class ExportService {
               _row('Увеличение', '${device!.magnification}×'),
             if (device?.compensatorType != null)
               _row('Компенсатор', device!.compensatorLabel),
-            _row('Допуск угла i (п. 2.3)',
-                Units.arcsec(v.toleranceArcsecSnapshot)),
+            if (device != null)
+              _row('Допуск угла i по РЭ', device.fieldToleranceLabel),
           ]),
           pw.SizedBox(height: 12),
 
@@ -144,14 +144,30 @@ class ExportService {
                 Units.signedArcsec(v.iAngleArcsec)),
             if (v.spreadArcsec != null)
               _row('Расхождение приёмов',
-                  '${Units.arcsec(v.spreadArcsec!)} при пределе '
-                  '${Units.arcsec(v.spreadLimitArcsec)} (ГКИНП 03-010-03, прил. 9)'),
-            _row('Допуск', Units.arcsec(v.toleranceArcsecSnapshot)),
+                  '${Units.arcsec(v.spreadArcsec!)} при ориентире '
+                  '${Units.arcsec(v.spreadLimitArcsec)} (справочно)'),
+            if (v.comparedInMillimetres)
+              _row('Расхождение (a2−b2)−(a1−b1)',
+                  '${v.deltaMm.toStringAsFixed(1)} мм'),
+            _row('Допуск', v.toleranceLabel),
             _row('Вердикт',
                 v.isPass ? 'В ДОПУСКЕ' : 'ВНЕ ДОПУСКА — требуется юстировка'),
             if (v.anomalyFlagged)
               _row('Примечание',
                   'Значение многократно превышает допуск — проверьте отсчёты'),
+          ]),
+          pw.SizedBox(height: 12),
+
+          // Основание вердикта. Единой нормы на полевое определение угла i
+          // не существует, поэтому протокол не ссылается на норму, а
+          // называет источник каждого числа.
+          _section('ОСНОВАНИЕ ДОПУСКА', [
+            _row('Способ', v.toleranceBasisLabel),
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 4),
+              child: pw.Text(v.toleranceProvenanceSnapshot,
+                  style: const pw.TextStyle(fontSize: 9)),
+            ),
           ]),
 
           if (v.adjusted && v.farTheoreticalMm != null) ...[

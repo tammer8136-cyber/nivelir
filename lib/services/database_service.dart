@@ -28,7 +28,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -64,6 +64,21 @@ class DatabaseService {
           await db.execute(
             'ALTER TABLE verifications ADD COLUMN performed_by TEXT',
           );
+        }
+        if (oldVersion < 8) {
+          // Поверки, записанные раньше, основания не несут — колонки
+          // остаются пустыми, а модель подставляет 'legacy' и говорит
+          // об этом прямым текстом.
+          for (final c in const {
+            'tolerance_basis_snapshot': 'TEXT',
+            'tolerance_provenance_snapshot': 'TEXT',
+            'tolerance_mm_snapshot': 'REAL',
+            'delta_mm': 'REAL',
+          }.entries) {
+            await db.execute(
+              'ALTER TABLE verifications ADD COLUMN ${c.key} ${c.value}',
+            );
+          }
         }
         if (oldVersion < 7 && oldVersion >= 5) {
           // Базы младше 5 сюда не попадают: блок v5 выше уже пересоздал
@@ -101,6 +116,17 @@ class DatabaseService {
             spread_limit_arcsec REAL NOT NULL,
 
             tolerance_arcsec_snapshot REAL NOT NULL,
+
+            -- Основание вердикта и его происхождение снимаются вместе с
+            -- числом: единого норматива нет, допуск берётся из РЭ модели,
+            -- а карточку модели могут поправить позже. Протокол должен
+            -- остаться тем, чем был в день поверки.
+            tolerance_basis_snapshot TEXT,
+            tolerance_provenance_snapshot TEXT,
+            -- Заполнен, когда вердикт вынесен сравнением в миллиметрах.
+            tolerance_mm_snapshot REAL,
+            -- Среднее (a2-b2)-(a1-b1) по приёмам, мм.
+            delta_mm REAL,
             verdict TEXT NOT NULL,
             anomaly_flagged INTEGER NOT NULL DEFAULT 0,
 
