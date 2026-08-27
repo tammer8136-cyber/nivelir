@@ -123,7 +123,7 @@ class _InstanceDetailScreenState extends State<InstanceDetailScreen> {
                   const SizedBox(height: 10),
                   _row('СКО', '${d.skoMmKm} мм/км'),
                   _row('Класс по ГОСТ 10528-90', d.gostClass),
-                  _row('Допуск угла i', Units.arcsec(d.toleranceArcsec)),
+                  _row('Допуск угла i по РЭ', d.fieldToleranceLabel),
                   if (d.magnification != null)
                     _row('Увеличение', '${d.magnification}×'),
                   _row('Компенсатор', d.compensatorLabel),

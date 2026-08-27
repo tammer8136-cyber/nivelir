@@ -28,7 +28,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -65,13 +65,21 @@ class DatabaseService {
             'ALTER TABLE verifications ADD COLUMN performed_by TEXT',
           );
         }
+        if (oldVersion < 7 && oldVersion >= 5) {
+          // Базы младше 5 сюда не попадают: блок v5 выше уже пересоздал
+          // device_models через _createDeviceTables, то есть сразу с
+          // колонками field_check_*. Повторный ALTER там упал бы.
+          await _migrateToV7(db);
+        }
       },
       onCreate: (db, version) async {
         await _createDeviceTables(db);
 
-        // Допуск угла i (10" по ГОСТ 10528-90) в таблице приборов не хранится:
-        // он одинаков для всех групп и выводится из класса в коде. В таблице
-        // поверок снимок допуска остаётся — на случай пересмотра норматива.
+        // Допуск полевой поверки лежит у МОДЕЛИ (field_check_* выше), потому
+        // что он свойство прибора: РЭ задают от 2 до 6 мм на разной базе.
+        // 10" по ГОСТ 10528-90 п. 2.3 — лабораторная характеристика,
+        // полевым допуском не является. В таблице поверок остаётся снимок
+        // применённого допуска: он должен пережить правку каталога.
         await db.execute('''
           CREATE TABLE verifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,6 +159,64 @@ class DatabaseService {
     return db;
   }
 
+  /// v7: каталог перестроен под данные РЭ.
+  ///
+  /// Прежние значения i_angle_tolerance_arcsec выводились по ГКИНП 17-196-85,
+  /// утратившей силу 01.10.1999, и оказались строже реальных допусков РЭ
+  /// в 2,6-8,8 раза. Поле удалено, вместо него блок field_check_*.
+  ///
+  /// Каталожные модели пересеваются целиком: их характеристики не
+  /// редактируются, терять нечего. Пользовательские (source = 'custom')
+  /// сохраняются — у них новые поля просто останутся NULL.
+  Future<void> _migrateToV7(Database db) async {
+    const columns = <String, String>{
+      'field_check_scheme': 'TEXT',
+      'field_check_base_min_m': 'REAL',
+      'field_check_base_max_m': 'REAL',
+      'field_check_offset_min_m': 'REAL',
+      'field_check_offset_max_m': 'REAL',
+      'field_check_tolerance_mm': 'REAL',
+      'field_check_delta_l_strict_m': 'REAL',
+      'field_check_delta_l_soft_m': 'REAL',
+      'field_check_source': 'TEXT',
+    };
+    for (final e in columns.entries) {
+      await db.execute(
+        'ALTER TABLE device_models ADD COLUMN ${e.key} ${e.value}',
+      );
+    }
+
+    // Экземпляры на каталожных моделях уцелеют: сначала переносим их на
+    // пересеянные модели по паре brand+model, потом чистим осиротевшие.
+    final instances = await db.query('device_instances');
+    final oldModels = <int, Map<String, Object?>>{
+      for (final m in await db.query('device_models', columns: ['id', 'brand', 'model']))
+        m['id'] as int: m,
+    };
+
+    await db.delete('device_models', where: "source = 'catalog'");
+    await _seedCatalogIfNeeded(db);
+
+    for (final inst in instances) {
+      final old = oldModels[inst['model_id'] as int];
+      if (old == null) continue;
+      final match = await db.query(
+        'device_models',
+        columns: ['id'],
+        where: 'brand = ? AND model = ?',
+        whereArgs: [old['brand'], old['model']],
+        limit: 1,
+      );
+      if (match.isEmpty) continue;
+      await db.update(
+        'device_instances',
+        {'model_id': match.first['id']},
+        where: 'id = ?',
+        whereArgs: [inst['id']],
+      );
+    }
+  }
+
   /// Справочник моделей и список экземпляров.
   Future<void> _createDeviceTables(Database db) async {
     await db.execute('''
@@ -171,6 +237,24 @@ class DatabaseService {
 
         reference_info TEXT,
         gost_class TEXT NOT NULL,
+
+        -- Схема и допуск полевой поверки угла i из РЭ этой модели.
+        -- Допуск хранится в МИЛЛИМЕТРАХ, как записан в РЭ, вместе со
+        -- схемой, на которой он намерен: оторвать число от геометрии
+        -- нельзя. Пересчёт в секунды — производная величина,
+        -- i" = 206265 * D[мм] / dL[мм].
+        -- NULL во всей группе — РЭ нет или полевой методики в нём нет;
+        -- тогда допуск задаёт исполнитель, и протокол это печатает.
+        field_check_scheme TEXT,
+        field_check_base_min_m REAL,
+        field_check_base_max_m REAL,
+        field_check_offset_min_m REAL,
+        field_check_offset_max_m REAL,
+        field_check_tolerance_mm REAL,
+        field_check_delta_l_strict_m REAL,
+        field_check_delta_l_soft_m REAL,
+        field_check_source TEXT,
+
         source TEXT NOT NULL DEFAULT 'custom'
       )
     ''');
@@ -221,8 +305,10 @@ class DatabaseService {
 
   /// Каталог моделей засевается один раз при первом запуске. Класс НЕ
   /// берётся из JSON — считается из СКО через DeviceModel, чтобы правило
-  /// жило в одном месте. Поля gost_class и i_angle_tolerance_arcsec в JSON
-  /// остались от прежней (уровенной) классификации и игнорируются.
+  /// жило в одном месте; gost_class в JSON игнорируется.
+  ///
+  /// Блок field_check_* из JSON берётся как есть: это данные РЭ, выводить
+  /// их в коде не из чего.
   Future<void> _seedCatalogIfNeeded(Database db) async {
     final existing = Sqflite.firstIntValue(
       await db.rawQuery(
@@ -344,7 +430,12 @@ class DatabaseService {
     final rows = await db.rawQuery('''
       SELECT i.*, m.id AS m_id, m.brand, m.model, m.magnification,
              m.sko_mm_km, m.compensator_type, m.min_focus_m, m.min_focus_note,
-             m.adjustment_method, m.reference_info, m.source
+             m.adjustment_method, m.reference_info, m.source,
+             m.field_check_scheme, m.field_check_base_min_m,
+             m.field_check_base_max_m, m.field_check_offset_min_m,
+             m.field_check_offset_max_m, m.field_check_tolerance_mm,
+             m.field_check_delta_l_strict_m, m.field_check_delta_l_soft_m,
+             m.field_check_source
       FROM device_instances i
       JOIN device_models m ON m.id = i.model_id
       ${hasSearch ? 'WHERE m.brand LIKE ? OR m.model LIKE ? OR i.serial_number LIKE ? OR i.assigned_to LIKE ?' : ''}
@@ -359,7 +450,12 @@ class DatabaseService {
     final rows = await db.rawQuery('''
       SELECT i.*, m.id AS m_id, m.brand, m.model, m.magnification,
              m.sko_mm_km, m.compensator_type, m.min_focus_m, m.min_focus_note,
-             m.adjustment_method, m.reference_info, m.source
+             m.adjustment_method, m.reference_info, m.source,
+             m.field_check_scheme, m.field_check_base_min_m,
+             m.field_check_base_max_m, m.field_check_offset_min_m,
+             m.field_check_offset_max_m, m.field_check_tolerance_mm,
+             m.field_check_delta_l_strict_m, m.field_check_delta_l_soft_m,
+             m.field_check_source
       FROM device_instances i
       JOIN device_models m ON m.id = i.model_id
       WHERE i.id = ?

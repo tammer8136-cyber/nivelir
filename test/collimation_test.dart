@@ -2,14 +2,120 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nivelir_app/data/help_articles.dart';
 import 'package:nivelir_app/models/device_instance.dart';
 import 'package:nivelir_app/models/device_model.dart';
+import 'package:nivelir_app/models/field_check_spec.dart';
 import 'package:nivelir_app/models/method_preset.dart';
 import 'package:nivelir_app/models/reminder.dart';
 import 'package:nivelir_app/models/verification.dart';
 import 'package:nivelir_app/services/nivelir/algorithms/classification.dart';
 import 'package:nivelir_app/services/nivelir/algorithms/collimation.dart';
 import 'package:nivelir_app/services/nivelir/algorithms/leveling_class.dart';
+import 'package:nivelir_app/services/nivelir/applied_tolerance.dart';
+
+
+/// Допуск исполнителя для тестов расчётного ядра: тесты проверяют формулу,
+/// а не источник числа. Основание допуска покрывается отдельной группой.
+AppliedTolerance _tol(double arcsec, {double deltaL = 50}) => AppliedTolerance(
+      basis: ToleranceBasis.executor,
+      toleranceArcsec: arcsec,
+      actualDeltaLM: deltaL,
+      provenance: 'тест',
+    );
 
 void main() {
+  group('основание допуска', () {
+    const rgk = FieldCheckSpec(
+      scheme: FieldCheckScheme.midThenNear,
+      baseMinM: 30,
+      baseMaxM: 50,
+      offsetMinM: 1,
+      offsetMaxM: 2,
+      toleranceMm: 3,
+      deltaLStrictM: 48,
+      deltaLSoftM: 26,
+      source: 'РЭ RGK, п. 4.2',
+    );
+
+    test('в геометрии РЭ вердикт идёт в миллиметрах, а не в секундах', () {
+      final t = AppliedTolerance.resolve(
+        spec: rgk,
+        actualDeltaLM: 48,
+        actualBaseM: 50,
+        actualOffsetM: 1,
+        executorArcsec: null,
+      );
+      expect(t.basis, ToleranceBasis.reMillimetres);
+      expect(t.comparesInMillimetres, isTrue);
+      // 4 мм — это 17", то есть больше пересчитанных 12,9". Но РЭ сравнивает
+      // миллиметры, и 4 мм при допуске 3 мм не проходят по обеим меркам.
+      expect(t.passes(deltaMm: 4, iArcsec: 17), isFalse);
+      expect(t.passes(deltaMm: 2.5, iArcsec: 10.7), isTrue);
+    });
+
+    test('вне геометрии РЭ допуск переносится в секунды по строгому краю', () {
+      final t = AppliedTolerance.resolve(
+        spec: rgk,
+        actualDeltaLM: 50,
+        actualBaseM: 100,
+        actualOffsetM: 25,
+        executorArcsec: null,
+      );
+      expect(t.basis, ToleranceBasis.reConverted);
+      expect(t.comparesInMillimetres, isFalse);
+      expect(t.geometryWithinRe, isFalse);
+      expect(t.toleranceArcsec, closeTo(12.9, 0.1));
+    });
+
+    test('РЭ без числа — допуск задаёт исполнитель, отката на 10" нет', () {
+      const sokkia = FieldCheckSpec(
+        scheme: FieldCheckScheme.midThenNear,
+        baseMinM: 30,
+        baseMaxM: 50,
+        offsetMinM: 2,
+        offsetMaxM: 2,
+        deltaLStrictM: 46,
+        deltaLSoftM: 26,
+        source: 'РЭ Sokkia B20, п. 7.3',
+      );
+      final t = AppliedTolerance.resolve(
+        spec: sokkia,
+        actualDeltaLM: 46,
+        actualBaseM: 50,
+        actualOffsetM: 2,
+        executorArcsec: 15,
+      );
+      expect(t.basis, ToleranceBasis.executor);
+      expect(t.toleranceArcsec, 15);
+      expect(t.provenance, contains('задан исполнителем'));
+      expect(t.provenance, isNot(contains('10528')));
+    });
+
+    test('данных РЭ нет вовсе — тоже исполнитель', () {
+      final t = AppliedTolerance.resolve(
+        spec: null,
+        actualDeltaLM: 50,
+        actualBaseM: 100,
+        actualOffsetM: 25,
+        executorArcsec: 12,
+      );
+      expect(t.basis, ToleranceBasis.executor);
+      expect(t.provenance, contains('данных РЭ на модель нет'));
+    });
+
+    test('схема третей: разность плеч равна двум третям длины', () {
+      const na2 = FieldCheckSpec(
+        scheme: FieldCheckScheme.thirdsSymmetric,
+        baseMinM: 45,
+        baseMaxM: 60,
+        toleranceMm: 2,
+        deltaLStrictM: 40,
+        deltaLSoftM: 30,
+        source: 'РЭ Leica NA2/NAK2',
+      );
+      expect(na2.deltaLFor(baseM: 60), closeTo(40, 0.001));
+      expect(na2.toleranceArcsecStrict, closeTo(10.3, 0.1));
+    });
+  });
+
   group('Расчёт угла i', () {
     test('исправный прибор: равные превышения дают ноль', () {
       final preset = MethodPreset.byId(MethodPreset.workingId);
@@ -134,7 +240,7 @@ void main() {
       final result = Collimation.summarize(
         runs: runs,
         geometry: preset.defaultGeometry,
-        toleranceArcsec: DeviceClassification.toleranceArcsec,
+        tolerance: _tol(10),
         runSpreadLimitArcsec: 5.0,
       );
       expect(result.iArcsec, closeTo(-2 / 50000 * 206265, 1e-6));
@@ -158,7 +264,7 @@ void main() {
               station2BMm: 1400,
             ),
         ],
-        toleranceArcsec: 10,
+        tolerance: _tol(10),
         runSpreadLimitArcsec: 5,
       );
     }
@@ -194,7 +300,7 @@ void main() {
             station2BMm: 1400,
           ),
         ],
-        toleranceArcsec: 10,
+        tolerance: _tol(10),
         runSpreadLimitArcsec: 5,
       );
       final v = Verification.fromResult(
@@ -559,7 +665,11 @@ void main() {
       expect(DeviceClassification.gostClass(3.0), 'технические');
     });
 
-    test('допуск угла i — 10 секунд для всех групп', () {
+    test('10 секунд ГОСТ 10528-90 — лабораторная величина, не полевой вердикт',
+        () {
+      // Число остаётся в справочных целях, но вердикт на него не опирается:
+      // полевой допуск свой у каждой модели и берётся из её РЭ. Проверенный
+      // разброс по 30 РЭ — от 6,9" (УОМЗ 4Н) до 44,2" (Bosch GOL 20).
       expect(DeviceClassification.toleranceArcsec, 10.0);
     });
 

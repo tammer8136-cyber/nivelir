@@ -5,7 +5,6 @@ import '../../models/device_model.dart';
 import '../../services/database_service.dart';
 import '../../services/nivelir/algorithms/classification.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/units.dart';
 
 /// Добавление и правка МОДЕЛИ прибора.
 ///
@@ -175,9 +174,15 @@ class _ModelFormScreenState extends State<ModelFormScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Класс: ${DeviceClassification.gostClass(_sko!)}'),
-                    Text(
-                      'Допуск угла i: '
-                      '${Units.arcsec(DeviceClassification.toleranceArcsec)}',
+                    // Полевой допуск задаётся не классом, а РЭ модели,
+                    // и у новой карточки его ещё нет. Показывать здесь
+                    // лабораторные 10" по ГОСТ значило бы выдать их за
+                    // полевой предел.
+                    const Text(
+                      'Допуск полевой поверки: из РЭ модели, '
+                      'заполняется отдельно',
+                      style: TextStyle(
+                          fontSize: 12, color: AppTheme.textSecondary),
                     ),
                     Text(DeviceClassification.designationHint(_sko!),
                         style: const TextStyle(

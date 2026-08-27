@@ -90,7 +90,7 @@ class _StepParamsState extends State<StepParams> {
                   ? null
                   : Text(
                       '${device.gostClass} · СКО ${device.skoMmKm} мм/км · '
-                      'допуск угла i ${Units.arcsec(device.toleranceArcsec)}',
+                      'допуск по РЭ: ${device.fieldToleranceLabel}',
                     ),
               trailing: const Icon(Icons.chevron_right),
               onTap: _pickDevice,

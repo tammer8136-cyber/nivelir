@@ -6,6 +6,7 @@ import '../models/verification.dart';
 import '../services/database_service.dart';
 import '../services/nivelir/algorithms/classification.dart';
 import '../services/nivelir/algorithms/collimation.dart';
+import '../services/nivelir/applied_tolerance.dart';
 import '../services/nivelir/algorithms/leveling_class.dart';
 import '../services/settings_service.dart';
 import '../utils/units.dart';
@@ -98,6 +99,25 @@ class WizardState extends ChangeNotifier {
   final station2FormKey = GlobalKey<FormState>();
 
   DeviceInstance? _device;
+
+  /// Допуск, заданный исполнителем. Нужен, когда РЭ прибора числа не даёт:
+  /// Topcon AT-B, Sokkia B и ADA описывают расстановку, но вместо допуска
+  /// пишут «юстируйте, пока разность не станет малой». Молчаливого отката
+  /// на 10" по ГОСТ быть не должно — это лабораторная характеристика.
+  double? _executorToleranceArcsec;
+
+  double? get executorToleranceArcsec => _executorToleranceArcsec;
+
+  /// true — без числа от исполнителя вердикт вынести нельзя.
+  bool get needsExecutorTolerance {
+    final spec = _device?.model.fieldCheck;
+    return spec == null || spec.toleranceArcsecStrict == null;
+  }
+
+  void setExecutorToleranceArcsec(double? value) {
+    _executorToleranceArcsec = value;
+    notifyListeners();
+  }
   DeviceInstance? get device => _device;
 
   MethodPreset _preset = MethodPreset.all.first;
@@ -294,10 +314,25 @@ class WizardState extends ChangeNotifier {
       );
     }
 
+    // Фактическая геометрия поверки: база — расстояние между рейками,
+    // вынос — меньшее плечо на смещённой станции. Обе величины нужны,
+    // чтобы понять, попадает ли расстановка в ту, для которой РЭ назначил
+    // свой допуск в миллиметрах.
+    final baseM = _geometry.station1ToA + _geometry.station1ToB;
+    final offsetM = _geometry.station2ToA < _geometry.station2ToB
+        ? _geometry.station2ToA
+        : _geometry.station2ToB;
+
     _result = Collimation.summarize(
       runs: runResults,
       geometry: _geometry,
-      toleranceArcsec: _device!.toleranceArcsec,
+      tolerance: AppliedTolerance.resolve(
+        spec: _device!.model.fieldCheck,
+        actualDeltaLM: _geometry.distanceDiffM.abs(),
+        actualBaseM: baseM,
+        actualOffsetM: offsetM,
+        executorArcsec: _executorToleranceArcsec,
+      ),
       runSpreadLimitArcsec: _device!.runSpreadLimitArcsec,
     );
     _adjusted = false;

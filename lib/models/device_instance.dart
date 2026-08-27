@@ -48,7 +48,7 @@ class DeviceInstance {
   String get adjustmentMethodLabel => model.adjustmentMethodLabel;
   bool get adjustmentInFieldForbidden => model.adjustmentInFieldForbidden;
   String get gostClass => model.gostClass;
-  double get toleranceArcsec => model.toleranceArcsec;
+  String get fieldToleranceLabel => model.fieldToleranceLabel;
   double get runSpreadLimitArcsec => model.runSpreadLimitArcsec;
   double get tempDriftArcsecPerC => model.tempDriftArcsecPerC;
   String get designationHint => model.designationHint;

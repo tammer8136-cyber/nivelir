@@ -1,4 +1,5 @@
 import '../services/nivelir/algorithms/classification.dart';
+import 'field_check_spec.dart';
 
 /// МОДЕЛЬ прибора — тип, а не конкретный нивелир.
 ///
@@ -35,6 +36,13 @@ class DeviceModel {
   /// Справочная информация: особенности, замечания по эксплуатации.
   final String? referenceInfo;
 
+  /// Схема и допуск полевой поверки угла i из РЭ этой модели.
+  ///
+  /// null — РЭ на модель нет либо полевой методики в нём нет. Тогда допуск
+  /// вводит исполнитель, и протокол обязан это сказать: молчаливого отката
+  /// на константу быть не должно.
+  final FieldCheckSpec? fieldCheck;
+
   /// 'catalog' — засеяна из assets, характеристики не редактируются;
   /// 'custom'  — модель, добавленная пользователем.
   final String source;
@@ -50,6 +58,7 @@ class DeviceModel {
     this.minFocusNote,
     this.adjustmentMethod,
     this.referenceInfo,
+    this.fieldCheck,
     this.source = 'custom',
   });
 
@@ -79,8 +88,49 @@ class DeviceModel {
   /// Класс выводится из СКО по компенсаторной колонке ГОСТ 10528-90.
   String get gostClass => DeviceClassification.gostClass(skoMmKm);
 
-  /// Допуск угла i — ГОСТ 10528-90, п. 2.3: 10" для всех групп.
-  double get toleranceArcsec => DeviceClassification.toleranceArcsec;
+  /// true — у модели есть допуск из РЭ, поверку можно вести по РЭ.
+  bool get hasFieldCheckFromRe => fieldCheck != null;
+
+  /// true — РЭ даёт не только схему, но и число. Только в этом случае
+  /// вердикт можно вынести на данных производителя.
+  bool get hasToleranceFromRe => fieldCheck?.hasTolerance ?? false;
+
+  /// Допуск угла i из РЭ, пересчитанный по строгому краю разрешённой
+  /// геометрии. null — РЭ числа не даёт (Topcon AT-B, Sokkia B, ADA Ruber
+  /// описывают расстановку, но пишут «юстируйте, пока разность не станет
+  /// малой») либо не даёт базы для пересчёта. Тогда число задаёт
+  /// исполнитель, и протокол это печатает.
+  ///
+  /// НЕ путать с 10" по ГОСТ 10528-90 п. 2.3: то лабораторная
+  /// характеристика прибора, полевым допуском она не является.
+  double? get toleranceArcsecFromRe => fieldCheck?.toleranceArcsecStrict;
+
+  /// Допуск полевой поверки для карточки прибора, готовой строкой.
+  ///
+  /// Показывает ровно то, что написано в РЭ, и честно говорит, когда там
+  /// ничего не написано. Подставлять сюда 10" по ГОСТ 10528-90 нельзя:
+  /// это лабораторная характеристика, проверяемая на коллиматоре, а не
+  /// полевой допуск.
+  String get fieldToleranceLabel {
+    final spec = fieldCheck;
+    if (spec == null) return 'источник не установлен';
+    if (!spec.hasTolerance) return 'в РЭ прибора не указан';
+
+    final mm = spec.toleranceMm!;
+    final mmText = mm == mm.roundToDouble()
+        ? mm.toStringAsFixed(0)
+        : mm.toString();
+    final arcsec = spec.toleranceArcsecStrict;
+    return arcsec == null
+        ? '$mmText мм по схеме РЭ'
+        : '$mmText мм · ${arcsec.toStringAsFixed(1)}" '
+            'при ΔL ${spec.deltaLStrictM!.toStringAsFixed(0)} м';
+  }
+
+  /// Лабораторный предел угла i по ГОСТ 10528-90, п. 2.3. Справочная
+  /// величина: проверяется в метрологической службе на коллиматоре,
+  /// в полевом вердикте не участвует.
+  double get labToleranceArcsec => DeviceClassification.toleranceArcsec;
 
   /// Предел расхождения приёмов по ГКИНП — справочный показатель.
   double get runSpreadLimitArcsec =>
@@ -118,6 +168,7 @@ class DeviceModel {
     String? minFocusNote,
     String? adjustmentMethod,
     String? referenceInfo,
+    FieldCheckSpec? fieldCheck,
     String? source,
   }) {
     return DeviceModel(
@@ -131,6 +182,7 @@ class DeviceModel {
       minFocusNote: minFocusNote ?? this.minFocusNote,
       adjustmentMethod: adjustmentMethod ?? this.adjustmentMethod,
       referenceInfo: referenceInfo ?? this.referenceInfo,
+      fieldCheck: fieldCheck ?? this.fieldCheck,
       source: source ?? this.source,
     );
   }
@@ -148,6 +200,7 @@ class DeviceModel {
         'reference_info': referenceInfo,
         'gost_class': gostClass,
         'source': source,
+        ...?fieldCheck?.toMap(),
       };
 
   factory DeviceModel.fromMap(Map<String, dynamic> m) => DeviceModel(
@@ -161,6 +214,7 @@ class DeviceModel {
         minFocusNote: m['min_focus_note'] as String?,
         adjustmentMethod: m['adjustment_method'] as String?,
         referenceInfo: m['reference_info'] as String?,
+        fieldCheck: FieldCheckSpec.fromMap(m),
         source: (m['source'] as String?) ?? 'custom',
       );
 }

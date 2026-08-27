@@ -5,7 +5,6 @@ import '../../models/device_instance.dart';
 import '../../models/device_model.dart';
 import '../../services/database_service.dart';
 import '../../theme/app_theme.dart';
-import '../../utils/units.dart';
 import 'model_form_screen.dart';
 
 /// Добавление и правка СВОЕГО ПРИБОРА (экземпляра).
@@ -263,7 +262,7 @@ class _ModelSpecs extends StatelessWidget {
                   color: AppTheme.textSecondary)),
           const SizedBox(height: 6),
           _row('СКО', '${model.skoMmKm} мм/км · ${model.gostClass}'),
-          _row('Допуск угла i', Units.arcsec(model.toleranceArcsec)),
+          _row('Допуск угла i по РЭ', model.fieldToleranceLabel),
           if (model.magnification != null)
             _row('Увеличение', '${model.magnification}×'),
           _row('Компенсатор', model.compensatorLabel),

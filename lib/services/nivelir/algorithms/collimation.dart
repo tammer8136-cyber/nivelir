@@ -1,4 +1,5 @@
 import '../../../models/method_preset.dart';
+import '../applied_tolerance.dart';
 import 'classification.dart';
 
 /// Расчётное ядро: определение угла i (коллимационной ошибки) нивелира.
@@ -36,7 +37,9 @@ class Collimation {
   /// Градусная мера радиана, ГКИНП: 206265".
   static const double radToArcsec = 206265.0;
 
-  /// Порог мягкого предупреждения — десятикратный допуск ГОСТ.
+  /// Порог мягкого предупреждения. Не норматив: самый мягкий допуск из
+  /// проверенных РЭ — 44" у Bosch GOL 20, поэтому 100" заведомо выше любого
+  /// заводского предела и ловит только грубый промах в отсчётах.
   static const double anomalyArcsec = 100.0;
 
   /// Расчёт одного приёма.
@@ -90,19 +93,23 @@ class Collimation {
 
   /// Свод по приёмам. При одном приёме размах не определён.
   ///
-  /// ГКИНП (ГНТА) 17-195-99, п. 4.2.5: количество приёмов в любом способе —
-  /// не менее трёх, за окончательное значение угла i принимают среднее.
-  /// Размах отдельных значений (предел 3"/5" по ГКИНП 03-010-03, прил. 9)
-  /// показывается справочно и на вердикт не влияет — вердикт даёт порог
-  /// 10" (ГОСТ 10528-90 п. 2.3, ГКИНП 17-195-99 п. 4.2.5).
+  /// Свод по приёмам.
+  ///
+  /// Вердикт даёт [tolerance] — он несёт и число, и его происхождение,
+  /// потому что единого порога не существует: допуск свой у каждой модели
+  /// и берётся из её РЭ. Размах по приёмам показывается справочно и на
+  /// вердикт не влияет.
   static CollimationResult summarize({
     required List<RunResult> runs,
     required MethodGeometry geometry,
-    required double toleranceArcsec,
+    required AppliedTolerance tolerance,
     required double runSpreadLimitArcsec,
   }) {
     final n = runs.length;
     final iMean = runs.map((r) => r.iArcsec).reduce((a, b) => a + b) / n;
+    // Среднее расхождение (a2-b2)-(a1-b1) — ровно та величина, которую
+    // РЭ сравнивает со своими миллиметрами.
+    final deltaMean = runs.map((r) => r.xMm).reduce((a, b) => a + b) / n;
     final hMean = runs.map((r) => r.hTrueMm).reduce((a, b) => a + b) / n;
     final farMean =
         runs.map((r) => r.farTheoreticalMm).reduce((a, b) => a + b) / n;
@@ -121,7 +128,8 @@ class Collimation {
       farTheoreticalMm: farMean,
       spreadArcsec: spread,
       spreadLimitArcsec: runSpreadLimitArcsec,
-      toleranceArcsec: toleranceArcsec,
+      deltaMm: deltaMean,
+      tolerance: tolerance,
       anomalyFlagged: iMean.abs() > anomalyArcsec,
     );
   }
@@ -165,8 +173,11 @@ class CollimationResult {
   /// Предел размаха по ГКИНП (3"/5") — справочно.
   final double spreadLimitArcsec;
 
-  /// Допуск ГОСТ 10528-90, п. 2.3.
-  final double toleranceArcsec;
+  /// Среднее расхождение (a2-b2)-(a1-b1) по приёмам, мм.
+  final double deltaMm;
+
+  /// Применённый допуск вместе с основанием и строкой провенанса.
+  final AppliedTolerance tolerance;
 
   final bool anomalyFlagged;
 
@@ -178,7 +189,8 @@ class CollimationResult {
     required this.farTheoreticalMm,
     required this.spreadArcsec,
     required this.spreadLimitArcsec,
-    required this.toleranceArcsec,
+    required this.deltaMm,
+    required this.tolerance,
     required this.anomalyFlagged,
   });
 
@@ -191,7 +203,12 @@ class CollimationResult {
 
   bool get runCountMeetsNorm => runsNorm != null;
 
-  bool get withinTolerance => iArcsec.abs() <= toleranceArcsec;
+  /// Допуск в секундах — для печати и для совместимости с экранами.
+  /// В режиме миллиметров это производная величина, вердикт даёт не она.
+  double get toleranceArcsec => tolerance.toleranceArcsec;
+
+  bool get withinTolerance =>
+      tolerance.passes(deltaMm: deltaMm, iArcsec: iArcsec);
 
   String get verdict => withinTolerance ? 'pass' : 'fail';
 
