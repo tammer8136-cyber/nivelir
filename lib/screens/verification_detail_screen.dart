@@ -160,9 +160,9 @@ class _VerificationDetailScreenState extends State<VerificationDetailScreen> {
                       Units.meters(v.distanceDiffM.abs())),
                   _row(
                     'Приёмов',
-                    '${v.runCount}${v.meetsRunsNorm ? '' : ' — ниже нормы'}',
+                    '${v.runCount}${v.meetsRunsNorm ? '' : ' — экспресс-проверка'}',
                   ),
-                  _row('Основание', v.runsNorm?.source ?? '—'),
+                  _row('Число приёмов задал', v.runsNorm?.source ?? 'исполнитель'),
                   if (v.performedBy != null && v.performedBy!.isNotEmpty)
                     _row('Поверку выполнил', v.performedBy!),
                   _row(

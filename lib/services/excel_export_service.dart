@@ -18,7 +18,7 @@ class ExcelExportService {
     'Метод',
     'Класс нивел.',
     'Поверку выполнил',
-    'Основание приёмов',
+    'Число приёмов задал',
     'Приём',
     'Ст.1 рейка A',
     'Ст.1 рейка B',
@@ -82,7 +82,7 @@ class ExcelExportService {
               ? '—'
               : LevelingClass.roman(v.levelingClass!)),
           TextCellValue(v.performedBy ?? '—'),
-          TextCellValue(v.runsNorm?.source ?? 'ниже нормы'),
+          TextCellValue(v.runsNorm?.source ?? 'исполнитель (один приём)'),
           run == null ? TextCellValue('—') : IntCellValue(run.runIndex),
           run == null
               ? TextCellValue('—')

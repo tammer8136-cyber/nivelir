@@ -34,15 +34,19 @@ class _StepParamsState extends State<StepParams> {
     final wizard = context.read<WizardState>();
     final db = context.read<DatabaseService>();
 
-    final presetId = await SettingsService.loadLastPreset();
-    if (presetId != null && mounted) {
-      wizard.setPreset(MethodPreset.byId(presetId));
-    }
-
+    // Прибор ставим ПЕРВЫМ: расстановка из РЭ существует только вместе с
+    // ним, и без прибора её нельзя ни подставить, ни восстановить.
     final deviceId = await SettingsService.loadLastDeviceId();
     if (deviceId != null && mounted) {
       final device = await db.getInstance(deviceId);
       if (device != null && mounted) wizard.setDevice(device);
+    }
+
+    final presetId = await SettingsService.loadLastPreset();
+    if (presetId != null && mounted) {
+      wizard.setPreset(wizard.presetById(presetId));
+    } else if (mounted) {
+      wizard.applyRePresetIfAvailable();
     }
 
     // Исполнитель обычно один и тот же. Не перетираем, если поле уже
@@ -123,12 +127,13 @@ class _StepParamsState extends State<StepParams> {
             // вылезает за край.
             isExpanded: true,
             items: [
-              for (final p in MethodPreset.all)
+              for (final p in wizard.availablePresets)
                 DropdownMenuItem(value: p.id, child: Text(p.title)),
             ],
             onChanged: (id) {
               if (id != null) {
-                context.read<WizardState>().setPreset(MethodPreset.byId(id));
+                context.read<WizardState>().setPreset(
+                    context.read<WizardState>().presetById(id));
               }
             },
           ),
@@ -162,9 +167,9 @@ class _StepParamsState extends State<StepParams> {
           const SizedBox(height: 8),
           Text(
             wizard.runsNorm == null
-                ? 'Один приём — экспресс-проверка. Не соответствует ни '
-                    'одному из действующих документов; протокол будет помечен.'
-                : 'Соответствует: ${wizard.runsNorm!.source}',
+                ? 'Один приём — экспресс-проверка. Промах при взятии '
+                    'отсчёта поймать нечем; протокол будет помечен.'
+                : wizard.runsNorm!.description,
             style: TextStyle(
               fontSize: 12,
               color: wizard.runsNorm == null
@@ -174,6 +179,40 @@ class _StepParamsState extends State<StepParams> {
             ),
           ),
           const SizedBox(height: 24),
+
+          // РЭ прибора допуска не даёт — его обязан задать исполнитель.
+          // Молчаливой подстановки быть не должно: 10" по ГОСТ 10528-90 —
+          // лабораторная величина, а ноль дал бы «вне допуска» на любом
+          // исправном приборе.
+          if (wizard.needsExecutorTolerance) ...[
+            const _SectionTitle('Допуск угла i'),
+            Text(
+              wizard.device?.model.fieldCheck == null
+                  ? 'Данных РЭ на эту модель нет. Задайте допуск сами — '
+                      'в протоколе будет написано, что число указано '
+                      'исполнителем.'
+                  : 'В РЭ этой модели допуск не указан: вместо числа там '
+                      'сказано юстировать, пока расхождение не станет малым. '
+                      'Задайте допуск сами — в протоколе будет написано, что '
+                      'число указано исполнителем.',
+              style: const TextStyle(
+                  fontSize: 12, color: AppTheme.textSecondary, height: 1.35),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: wizard.toleranceCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Допуск, угловых секунд',
+                border: OutlineInputBorder(),
+                helperText: 'Для ориентира: по проверенным РЭ других моделей '
+                    'разброс от 6,9 до 44,2 секунды',
+                helperMaxLines: 3,
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
 
           const _SectionTitle('Плечи, м'),
           const Text(
@@ -225,6 +264,13 @@ class _StepParamsState extends State<StepParams> {
             onPressed: () {
               if (device == null) {
                 _snack('Сначала выберите прибор');
+                return;
+              }
+              if (!wizard.pullExecutorTolerance()) {
+                _snack(
+                  'Задайте допуск угла i: РЭ этой модели числа не даёт, '
+                  'а подставлять его за вас приложение не будет',
+                );
                 return;
               }
               if (!wizard.pullGeometryFromControllers()) {

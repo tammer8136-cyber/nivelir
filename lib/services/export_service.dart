@@ -84,11 +84,9 @@ class ExportService {
             _row(
               'Число приёмов',
               v.runsNorm == null
-                  ? '${v.runCount} — НИЖЕ НОРМЫ '
-                      '(минимум ${RunsNorm.laboratory.minRuns} по '
-                      '${RunsNorm.laboratory.source})'
-                  : '${v.runCount} — соответствует '
-                      '${v.runsNorm!.source}',
+                  ? '${v.runCount} — экспресс-проверка, промах в отсчёте '
+                      'проконтролировать нечем'
+                  : '${v.runCount} (решение исполнителя)',
             ),
             _row(
               'Класс нивелирования',
@@ -167,6 +165,22 @@ class ExportService {
               padding: const pw.EdgeInsets.only(top: 4),
               child: pw.Text(v.toleranceProvenanceSnapshot,
                   style: const pw.TextStyle(fontSize: 9)),
+            ),
+            // Единственный документ, который обязывает выполнять саму
+            // процедуру. Ни числа, ни схемы он не даёт — отсылает к
+            // эксплуатационной документации прибора, откуда они и взяты.
+            // Форма ссылки рекомендована письмом ФАУ «ФЦС» от 17.09.2026
+            // № Исх-5913, там же подтверждено, что пункт действует.
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 6),
+              child: pw.Text(
+                'Поверка выполнена во исполнение СП 317.1325800.2017 '
+                '(с Изменениями № 1, № 2), пункт 4.12: приборы перед '
+                'началом и в процессе работ проверяют по эксплуатационной '
+                'документации. Порядок и периодичность устанавливает '
+                'исполнитель.',
+                style: const pw.TextStyle(fontSize: 8),
+              ),
             ),
           ]),
 

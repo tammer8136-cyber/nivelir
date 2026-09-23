@@ -28,7 +28,7 @@ class DatabaseService {
 
     final db = await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -64,6 +64,14 @@ class DatabaseService {
           await db.execute(
             'ALTER TABLE verifications ADD COLUMN performed_by TEXT',
           );
+        }
+        if (oldVersion < 9) {
+          // В ассете схемы были записаны как mid_then_near, а enum
+          // сериализуется в midThenNear — FieldCheckSpec.fromMap не
+          // находил совпадения и возвращал null. В базу при первом севе
+          // ушли пустые field_check_*, и каждая карточка показывала
+          // «источник не установлен». Пересеваем.
+          await _reseedCatalog(db);
         }
         if (oldVersion < 8) {
           // Поверки, записанные раньше, основания не несут — колонки
@@ -212,24 +220,48 @@ class DatabaseService {
       );
     }
 
-    // Экземпляры на каталожных моделях уцелеют: сначала переносим их на
-    // пересеянные модели по паре brand+model, потом чистим осиротевшие.
-    final instances = await db.query('device_instances');
-    final oldModels = <int, Map<String, Object?>>{
-      for (final m in await db.query('device_models', columns: ['id', 'brand', 'model']))
-        m['id'] as int: m,
-    };
+    await _reseedCatalog(db);
+  }
 
-    await db.delete('device_models', where: "source = 'catalog'");
+  /// Пересев каталога с сохранением экземпляров пользователя.
+  ///
+  /// Вынесено отдельно, потому что нужно каждый раз, когда меняется
+  /// содержимое ассета: сеятель сам по себе молчит, если каталожные
+  /// строки уже есть, и обновление до пользователя не доезжает.
+  Future<void> _reseedCatalog(Database db) async {
+    // Порядок здесь принципиален. device_instances ссылается на
+    // device_models с ON DELETE RESTRICT, а внешние ключи включены
+    // (PRAGMA foreign_keys = ON в onConfigure). Удалить старые каталожные
+    // модели раньше, чем экземпляры переведены на новые, нельзя: SQLite
+    // отклонит удаление, onUpgrade бросит исключение, и база не откроется
+    // вовсе — приложение не запустится.
+    //
+    // Поэтому: помечаем старые записи, доливаем новые рядом, переводим
+    // экземпляры по паре brand+model и только потом удаляем помеченные,
+    // когда на них уже никто не ссылается.
+
+    // 1. Убираем метку 'catalog', иначе сеятель решит, что каталог на месте.
+    await db.update(
+      'device_models',
+      {'source': 'catalog_v6'},
+      where: "source = 'catalog'",
+    );
+
+    final oldModels = await db.query(
+      'device_models',
+      columns: ['id', 'brand', 'model'],
+      where: "source = 'catalog_v6'",
+    );
+
+    // 2. Новый каталог ложится рядом со старым.
     await _seedCatalogIfNeeded(db);
 
-    for (final inst in instances) {
-      final old = oldModels[inst['model_id'] as int];
-      if (old == null) continue;
+    // 3. Экземпляры переезжают на новые модели по паре brand+model.
+    for (final old in oldModels) {
       final match = await db.query(
         'device_models',
         columns: ['id'],
-        where: 'brand = ? AND model = ?',
+        where: "brand = ? AND model = ? AND source = 'catalog'",
         whereArgs: [old['brand'], old['model']],
         limit: 1,
       );
@@ -237,11 +269,34 @@ class DatabaseService {
       await db.update(
         'device_instances',
         {'model_id': match.first['id']},
-        where: 'id = ?',
-        whereArgs: [inst['id']],
+        where: 'model_id = ?',
+        whereArgs: [old['id']],
       );
     }
+
+    // 4. Старые записи, на которые больше никто не ссылается, удаляем
+    //    поштучно: если модель исчезла из нового каталога, а экземпляр на
+    //    ней остался, удаление этой строки не пройдёт по внешнему ключу.
+    //    Такую запись оставляем жить — потеря экземпляра пользователя
+    //    хуже, чем лишняя строка в справочнике.
+    for (final old in oldModels) {
+      final used = Sqflite.firstIntValue(await db.rawQuery(
+        'SELECT COUNT(*) FROM device_instances WHERE model_id = ?',
+        [old['id']],
+      ));
+      if (used != null && used > 0) {
+        await db.update(
+          'device_models',
+          {'source': 'custom'},
+          where: 'id = ?',
+          whereArgs: [old['id']],
+        );
+        continue;
+      }
+      await db.delete('device_models', where: 'id = ?', whereArgs: [old['id']]);
+    }
   }
+
 
   /// Справочник моделей и список экземпляров.
   Future<void> _createDeviceTables(Database db) async {

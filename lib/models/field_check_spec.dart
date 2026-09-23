@@ -156,11 +156,38 @@ class FieldCheckSpec {
   ///
   /// Если РЭ базы не называет — проверять нечего, возвращается null:
   /// это не «да» и не «нет», а «в РЭ нет данных для проверки».
-  bool? geometryWithinRe({required double baseM, double? offsetM}) {
+  bool? geometryWithinRe({
+    required double baseM,
+    double? offsetM,
+    double? actualDeltaLM,
+  }) {
     if (!hasBase) return null;
     if (baseM < baseMinM! || baseM > baseMaxM!) return false;
-    if (!hasOffset || offsetM == null) return true;
-    return offsetM >= offsetMinM! && offsetM <= offsetMaxM!;
+    if (hasOffset && offsetM != null) {
+      if (offsetM < offsetMinM! || offsetM > offsetMaxM!) return false;
+    }
+
+    // База и вынос в диапазоне — но это ещё не значит, что расстановка та.
+    // У схемы «за передней рейкой» (УОМЗ, база 80-90, вынос 2-4) плечи
+    // 45/45 и 2/88 дают базу 90 и вынос 2, оба в диапазоне, — а станция
+    // при этом стоит ВНУТРИ отрезка, то есть по чужой схеме. Разность
+    // плеч выходит 86 м вместо 90, и те же 3 мм означают уже 7,2", а не
+    // 6,9".
+    //
+    // Сравнивать с диапазоном ΔL бесполезно: 86 м законны для базы 86.
+    // Сравнивать надо с тем, что схема РЭ дала бы ПРИ ЭТИХ ЖЕ базе и
+    // выносе — тогда подмена схемы видна сразу.
+    if (actualDeltaLM != null) {
+      final expected =
+          deltaLFor(baseM: baseM, offsetM: offsetM ?? offsetMinM ?? 0).abs();
+      if (expected > 0) {
+        // Допуск на округление плеч в поле — 2 %.
+        if ((actualDeltaLM.abs() - expected).abs() / expected > 0.02) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   String get schemeLabel {
@@ -248,9 +275,13 @@ class FieldCheckSpec {
     final schemeName = m['field_check_scheme'] as String?;
     if (source == null || schemeName == null) return null;
 
+    // Терпим оба написания. toMap() пишет scheme.name, то есть midThenNear,
+    // но в ассете каталога схемы записаны как mid_then_near. Сравнение
+    // строк напрямую отключало данные РЭ у всех карточек разом.
+    final wanted = schemeName.replaceAll('_', '').toLowerCase();
     FieldCheckScheme? scheme;
     for (final s in FieldCheckScheme.values) {
-      if (s.name == schemeName) scheme = s;
+      if (s.name.toLowerCase() == wanted) scheme = s;
     }
     if (scheme == null) return null;
 

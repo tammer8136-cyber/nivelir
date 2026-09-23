@@ -108,6 +108,19 @@ class WizardState extends ChangeNotifier {
 
   double? get executorToleranceArcsec => _executorToleranceArcsec;
 
+  /// Контроллер поля ввода допуска исполнителя.
+  final toleranceCtrl = TextEditingController();
+
+  /// Забирает введённое значение. false — поле пустое или не число,
+  /// а без него вердикт вынести не на чем.
+  bool pullExecutorTolerance() {
+    if (!needsExecutorTolerance) return true;
+    final v = double.tryParse(toleranceCtrl.text.trim().replaceAll(',', '.'));
+    if (v == null || v <= 0) return false;
+    _executorToleranceArcsec = v;
+    return true;
+  }
+
   /// true — без числа от исполнителя вердикт вынести нельзя.
   bool get needsExecutorTolerance {
     final spec = _device?.model.fieldCheck;
@@ -122,6 +135,23 @@ class WizardState extends ChangeNotifier {
 
   MethodPreset _preset = MethodPreset.all.first;
   MethodPreset get preset => _preset;
+
+  /// Расстановка из РЭ выбранного прибора, если РЭ её описывает и называет
+  /// расстояния. null — предлагать нечего.
+  MethodPreset? get rePreset {
+    final spec = _device?.model.fieldCheck;
+    return spec == null ? null : MethodPreset.fromSpec(spec);
+  }
+
+  /// Список методов для мастера: расстановка из РЭ идёт первой, если есть.
+  List<MethodPreset> get availablePresets {
+    final re = rePreset;
+    return [if (re != null) re, ...MethodPreset.all];
+  }
+
+  MethodPreset presetById(String id) =>
+      availablePresets.firstWhere((p) => p.id == id,
+          orElse: () => MethodPreset.byId(id));
 
   MethodGeometry _geometry = MethodPreset.all.first.defaultGeometry;
   MethodGeometry get geometry => _geometry;
@@ -182,13 +212,39 @@ class WizardState extends ChangeNotifier {
   // ==========================================================================
 
   void setDevice(DeviceInstance? device) {
+    final prev = _device;
     _device = device;
+
+    // Смена прибора меняет и расстановку: у нового может быть своя схема
+    // из РЭ. Держать чужую геометрию под новым прибором нельзя — вердикт
+    // молча уедет из миллиметров в пересчёт. Но выбор пользователя
+    // уважаем: если он сам взял другой метод, не трогаем.
+    if (device?.model.id != prev?.model.id &&
+        (_preset.id == MethodPreset.reManualId || prev == null)) {
+      final re = rePreset;
+      if (re != null) {
+        setPreset(re);
+        return;
+      }
+      if (_preset.id == MethodPreset.reManualId) {
+        setPreset(MethodPreset.all.first);
+        return;
+      }
+    }
     notifyListeners();
   }
 
   void setLevelingClass(int? levelingClass) {
     _levelingClass = levelingClass;
     notifyListeners();
+  }
+
+  /// Выбор прибора подставляет его расстановку из РЭ: это самый частый
+  /// сценарий и единственный, на котором вердикт идёт в миллиметрах.
+  /// Если РЭ расстояний не даёт, остаётся то, что было выбрано.
+  void applyRePresetIfAvailable() {
+    final re = rePreset;
+    if (re != null) setPreset(re);
   }
 
   void setPreset(MethodPreset preset) {
@@ -447,6 +503,7 @@ class WizardState extends ChangeNotifier {
     s1BCtrl.dispose();
     s2ACtrl.dispose();
     s2BCtrl.dispose();
+    toleranceCtrl.dispose();
     super.dispose();
   }
 }

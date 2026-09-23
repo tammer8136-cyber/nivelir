@@ -93,7 +93,11 @@ class AppliedTolerance {
     required double? executorArcsec,
   }) {
     final within = (spec != null && actualBaseM != null)
-        ? spec.geometryWithinRe(baseM: actualBaseM, offsetM: actualOffsetM)
+        ? spec.geometryWithinRe(
+            baseM: actualBaseM,
+            offsetM: actualOffsetM,
+            actualDeltaLM: actualDeltaLM,
+          )
         : null;
 
     // 1. РЭ даёт число, и мы стоим там, где РЭ велит. Сравниваем в мм.
